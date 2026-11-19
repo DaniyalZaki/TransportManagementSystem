@@ -44,7 +44,7 @@ hosting decision enables RTO/RPO verification.
 
 ## 4. Tasks
 
-### S0 — Foundation
+### S0 — Foundation [HITL]
 
 1. Propose the initial repository structure and obtain approval before creating
    implementation files, as required by `AGENTS.md`.
@@ -62,7 +62,7 @@ hosting decision enables RTO/RPO verification.
 7. Set up Pytest and Cypress test foundations and the single-worker in-process
    read-cache boundary.
 
-### S1 — Published transport
+### S1 — Published transport [AFK]
 
 1. Model versioned routes, free-text origin/destination/direction, buses,
    assignments, recurring departures, date overrides, and published pointers.
@@ -77,7 +77,7 @@ hosting decision enables RTO/RPO verification.
 6. Test PKT boundaries, no-service overrides, current-departure selection,
    published-only reads, and incomplete/conflicting data display rules.
 
-### S2 — Managed transport publishing
+### S2 — Managed transport publishing [HITL]
 
 1. Implement named change sets, draft creation/update, 30-day draft expiry,
    optimistic stale-change-set detection, and rebase workflow.
@@ -92,7 +92,7 @@ hosting decision enables RTO/RPO verification.
 6. Build authorized admin views and tests for RBAC, optimistic concurrency,
    draft isolation, recovery, retention, and cache freshness.
 
-### S3 — Announcements and urgent operations
+### S3 — Announcements and urgent operations [HITL]
 
 1. Implement direct announcement publication, PKT expiry, newest-first order,
    manual removal, and 30-day removed/expired-record retention.
@@ -105,7 +105,7 @@ hosting decision enables RTO/RPO verification.
 5. Build public/admin experiences and lifecycle tests, including multiple
    banners and announcement-expiry/banner independence.
 
-### S4 — Feedback delivery
+### S4 — Feedback delivery [AFK]
 
 1. Build the anonymous feedback form with optional name/contact, hidden
    honeypot, and receipt/error UI.
@@ -119,7 +119,7 @@ hosting decision enables RTO/RPO verification.
 5. Delete feedback after 30 days and test delivery, retry, duplicate, honeypot,
    anonymous, and retention behavior.
 
-### S5 — Resilient PWA
+### S5 — Resilient PWA [HITL]
 
 1. Implement Workbox with Cache Storage/IndexedDB and a single snapshot
    timestamp for cached public data and announcements.
@@ -132,7 +132,7 @@ hosting decision enables RTO/RPO verification.
 5. Test browser behavior for cache expiry, refresh failure, reconnection, and
    public data isolation.
 
-### S6 — Verification and release readiness
+### S6 — Verification and release readiness [HITL]
 
 1. Run formatter, linting, type checks, unit/integration tests, Cypress suites,
    build checks, and API-contract checks.
