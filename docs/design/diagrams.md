@@ -1,55 +1,91 @@
 # System Diagrams
 
 ## Container view
+
 ```mermaid
 flowchart TB
-  Public --> PWA[Public Next.js PWA]
-  Staff --> Admin[Admin Next.js app]
-  PWA --> API[FastAPI modular monolith]
-  Admin --> API
-  API --> Auth
-  API --> Transport
-  API --> Announcement
-  API --> Feedback
-  API --> Audit
+  Student[Student / public] --> PWA[Public Next.js PWA]
+  Staff[Transport Management or designated administrator] --> Admin[Admin Next.js app]
+  PWA -->|HTTPS public API| API[FastAPI modular monolith]
+  Admin -->|HTTPS + JWT| API
+  API --> Auth[Authentication]
+  API --> Transport[Transport Data]
+  API --> Ann[Announcement]
+  API --> Feedback[Feedback]
+  API --> Audit[Audit]
   Auth --> Supabase[Self-hosted Supabase Auth]
-  Transport --> DB[(PostgreSQL)]
-  Announcement --> DB
+  Auth --> DB[(PostgreSQL)]
+  Transport --> DB
+  Ann --> DB
   Feedback --> DB
   Audit --> DB
   Transport --> Cache[Single-worker in-process cache]
+  Ann --> Cache
+  Feedback --> SMTP[Configured Transport Management mailbox]
   PWA --> Local[Workbox + Cache Storage + IndexedDB]
 ```
 
-## Publication sequence
+Only backend persistence adapters access PostgreSQL. The cache and browser storage are not systems of record.
+
+## Atomic transport publication
+
 ```mermaid
 sequenceDiagram
-  participant A as Admin
-  participant T as Transport API
+  participant A as Admin app
+  participant API as FastAPI / Transport Data
   participant DB as PostgreSQL
-  participant AU as Audit
-  participant C as Cache
-  A->>T: publish(change set, expected base)
-  T->>DB: verify role/draft/base
-  alt stale
-    T-->>A: 409 rebase required
+  participant AUD as Audit module
+  participant C as Read cache
+  participant P as Public PWA
+  A->>API: Publish(change set, expected base, publish_anyway)
+  API->>DB: Verify role, draft state, current base
+  alt stale base
+    DB-->>API: conflict
+    API-->>A: 409; rebase required
   else eligible
-    T->>DB: promote snapshot/current pointer
-    T->>AU: write publisher/time event
-    T->>C: invalidate synchronously
-    T-->>A: published
+    API->>DB: Begin transaction; promote snapshot/current pointer
+    API->>AUD: Record publisher + publication time
+    AUD->>DB: Insert publication event
+    API->>C: Invalidate relevant reads synchronously
+    API->>DB: Commit
+    API-->>A: 201 published
+    P->>API: Read published schedule/current departures
+    API-->>P: new published view only
   end
 ```
 
-## PKT schedule and PWA state
+## Schedule resolution in PKT
+
 ```mermaid
 flowchart TD
-  Now[Current PKT] --> Date[Derive service date]
-  Date --> Override{Full-day override?}
-  Override -->|no service| None[No service]
-  Override -->|no| Weekly[Published weekly departures]
-  Weekly --> Partial[Apply Route + Bus + time overrides]
-  Partial --> Current[Earliest departure >= now or no further today]
+  T[Current PKT instant] --> D[Derive PKT service date and weekday]
+  D --> O{Full-day override?}
+  O -->|No service| NS[Return no service]
+  O -->|No| W[Load published weekly departures]
+  W --> P[Apply partial overrides matching Route + Bus + time]
+  P --> S[Sort scheduled departures]
+  S --> N[For each Route–Bus choose earliest time >= now]
+  N --> R[Or return No further departures today]
 ```
 
-Freshness is based only on the saved successful synchronization timestamp (fresh through 5 minutes). Offline and service outage are distinct connectivity states. Cached core data/announcements expire at 24 hours; active urgent banners are never cached.
+## PWA freshness state
+
+```mermaid
+stateDiagram-v2
+  [*] --> Loading
+  Loading --> Fresh: fetch succeeds; save snapshot/time
+  Loading --> Unavailable: no snapshot and fetch fails
+  Fresh --> Fresh: successful scheduled/reconnect/manual refresh
+  Fresh --> Stale: age > 5 min
+  Fresh --> Offline: browser offline; snapshot age <= 24h
+  Fresh --> Outage: online, fetch fails; snapshot age <= 24h
+  Stale --> Fresh: fetch succeeds
+  Stale --> Offline: browser offline
+  Stale --> Outage: online, fetch fails
+  Offline --> Fresh: reconnect + fetch succeeds
+  Outage --> Fresh: fetch succeeds
+  Offline --> Unavailable: snapshot age > 24h
+  Outage --> Unavailable: snapshot age > 24h
+```
+
+Fresh/stale is an age property of the saved successful synchronization timestamp. Offline/outage is a connectivity property; either can coexist conceptually with stale content. Active urgent banners bypass local persistence and appear only after an online fetch.

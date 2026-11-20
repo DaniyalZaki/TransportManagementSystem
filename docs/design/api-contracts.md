@@ -1,35 +1,78 @@
 # API Contracts
 
-## Status
-Proposed REST contract derived from PRD, architecture, plan, and ADR-011. It does not supersede them. Writes require a locally validated Supabase JWT and backend RBAC. Public reads and feedback are unauthenticated.
+## Status and conventions
 
-## Public endpoints
-| Method/path | Outcome |
+This proposed REST contract is derived from `PRD.md`, `architecture.md`, `plan.md`, and ADR-011. It records an implementation target; it does not supersede those sources. All write endpoints require a locally validated Supabase JWT and backend RBAC. Public read and feedback endpoints are unauthenticated.
+
+- Base path: `/api/v1`; JSON uses `snake_case`; timestamps are RFC 3339 UTC instants rendered by clients in PKT.
+- `401` means missing/invalid authentication; `403` means authenticated but unauthorized; `409` is stale/duplicate conflict; `422` is input or business-rule validation failure.
+- Public transport responses contain only the active published change set. A cache is never a source of truth.
+
+## Public contracts
+
+| Method and path | Purpose | Success |
+|---|---|---|
+| `GET /public/transport/current-departures?service_date=YYYY-MM-DD` | Next published departure per Route–Bus pair for a PKT service date; defaults to today. | `200 CurrentDeparturesResponse` |
+| `GET /public/transport/schedule?service_date=YYYY-MM-DD` | Published daily schedule after date override resolution. | `200 ScheduleResponse` |
+| `GET /public/transport/routes` | Published route metadata. | `200 Route[]` |
+| `GET /public/announcements` | Active nonexpired/nonremoved announcements, newest first. | `200 Announcement[]` |
+| `GET /public/urgent-banners` | Active urgent banners, newest first; not offline-cacheable. | `200 UrgentBanner[]` |
+| `POST /public/feedback` | Submit anonymous or identified feedback. | `201 FeedbackReceipt`; `202` on queued retry |
+
+`CurrentDeparturesResponse` has an item for every published Route–Bus grouping. Each item is either `status: "scheduled"` with a departure or `status: "no_further_departures_today"`; it never implies GPS location or motion.
+
+```json
+{
+  "service_date": "2026-11-19",
+  "departures": [{"route_id":"R-01","bus_identifier":"C-12","status":"scheduled","scheduled_departure_at":"2026-11-19T14:30:00+05:00"}],
+  "published_at": "2026-11-19T08:00:00Z"
+}
+```
+
+`ScheduleResponse` includes `service_date`, `service_status` (`operating` or `no_service`), `entries`, and `published_at`. Each entry contains a route ID, separately maintained origin/destination/direction, bus identifier, and PKT scheduled departure.
+
+```json
+// POST /public/feedback
+{"content":"The afternoon pickup sign needs clarity.","name":"Optional","contact":"Optional","website":""}
+```
+
+`website` is the hidden honeypot; a nonempty value is rejected. Content is lowercased, outer whitespace trimmed, and repeated internal whitespace collapsed before comparing the prior 10 minutes. No IP-based limit is applied. A retry-pending duplicate receives a neutral `200 {"status":"already_received"}` response.
+
+## Privileged transport contracts
+
+Both privileged roles may manage transport data; only `transport_management` may manage accounts.
+
+| Method and path | Purpose | Rules |
+|---|---|---|
+| `POST /admin/transport/change-sets` | Create named draft. | Starts at current published baseline. |
+| `GET/PATCH /admin/transport/change-sets/{id}` | Read/save draft routes, buses, assignments, schedules, overrides. | Carries `base_published_change_set_id`; never public. |
+| `POST /admin/transport/change-sets/{id}/validate` | Calculate incomplete/conflict warnings. | Warnings do not block publication. |
+| `POST /admin/transport/change-sets/{id}/rebase` | Rebase stale draft. | Required before stale publish. |
+| `POST /admin/transport/change-sets/{id}/publish` | Atomically publish. | Explicit `publish_anyway` needed with warnings; one audit record + synchronous cache invalidation. |
+| `GET /admin/transport/publications` | List recent publications. | Publisher/time only; 30-day window. |
+| `POST /admin/transport/publications/{id}/recover` | Recover eligible published set. | Whole change set only; never draft/announcement. |
+
+Publish request: `{"expected_base_published_change_set_id":"cs_01","publish_anyway":false}`. A changed base returns `409 stale_change_set`; success returns the new published change-set ID and publication time.
+
+## Announcements, banners, and accounts
+
+| Method and path | Purpose |
 |---|---|
-| GET /api/v1/public/transport/current-departures?service_date=YYYY-MM-DD | Published next departure per Route–Bus group, or `no_further_departures_today`; PKT. |
-| GET /api/v1/public/transport/schedule?service_date=YYYY-MM-DD | Published schedule after override resolution. |
-| GET /api/v1/public/transport/routes | Published route metadata. |
-| GET /api/v1/public/announcements | Active nonexpired/nonremoved announcements, newest first. |
-| GET /api/v1/public/urgent-banners | Active banners, newest first; never offline cached. |
-| POST /api/v1/public/feedback | Anonymous/identified feedback; honeypot and normalized duplicate checks. |
+| `POST/PATCH /admin/announcements[/{id}]` | Directly publish/edit announcement; `expires_at_pkt` is supplied or null for manual removal. No version history. |
+| `POST /admin/announcements/{id}/remove` | Hide announcement. |
+| `POST /admin/announcements/{id}/confirm-operational-change` | Confirm operational change before publication. |
+| `POST /admin/urgent-banners` | Create separate persistent banner linked to urgent announcement. |
+| `POST /admin/urgent-banners/{id}/remove` | Hide banner without resolving it. |
+| `POST /admin/urgent-banners/{id}/resolve` | Mark banner resolved and stop public display. |
+| `GET /admin/me` | Return current privileged user and backend-mapped role. |
+| `GET/POST /admin/accounts`, `PATCH /admin/accounts/{supabase_user_id}` | Transport Management only: role mappings/activation. |
 
-Current departures never imply GPS location. Feedback has optional name/contact and a hidden `website` honeypot. Duplicate comparison lowercases, trims, and collapses repeated internal whitespace for the prior 10 minutes. No IP limiting is used.
-
-## Privileged endpoints
-| Method/path | Outcome |
-|---|---|
-| POST, GET, PATCH /api/v1/admin/transport/change-sets | Create/read/save named drafts. |
-| POST /{id}/validate, /{id}/rebase, /{id}/publish | Validate warnings, rebase stale draft, atomically publish. |
-| GET /api/v1/admin/transport/publications | 30-day publisher/time-only history. |
-| POST /api/v1/admin/transport/publications/{id}/recover | Whole published change-set recovery only. |
-| POST/PATCH /api/v1/admin/announcements | Direct announcement publication/edit; no version history. |
-| POST /api/v1/admin/urgent-banners and /{id}/remove or /{id}/resolve | Separate persistent-banner lifecycle. |
-| GET/POST/PATCH /api/v1/admin/accounts | Transport Management only. |
-
-A publish request carries `expected_base_published_change_set_id` and `publish_anyway`; a stale base returns 409 and must rebase. Successful publication writes one audit record and synchronously invalidates cache. Removal of a banner does not resolve it; banner expiry is independent of announcement expiry.
+An urgent operational change is both an announcement and independent banner. The banner remains active if its announcement expires, until an authorized user removes or resolves it. Deactivation blocks new login but does not revoke an otherwise valid active token.
 
 ## Error envelope
+
 ```json
-{"error":{"code":"stale_change_set","message":"Rebase before publishing.","details":[]}}
+{"error":{"code":"duplicate_feedback","message":"An equivalent submission was received recently.","details":[{"field":"content","reason":"duplicate_within_10_minutes"}]}}
 ```
-Codes include `unauthenticated`, `forbidden`, `validation_failed`, `stale_change_set`, `draft_expired`, `duplicate_feedback`, `honeypot_rejected`, and `service_unavailable`.
+
+Stable codes include `unauthenticated`, `forbidden`, `validation_failed`, `stale_change_set`, `draft_expired`, `duplicate_feedback`, `honeypot_rejected`, `resource_not_found`, and `service_unavailable`.
