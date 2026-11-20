@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.modules.authentication.presentation.router import router as authentication_router
+from src.modules.transport_data.presentation.router import router as transport_router
 
 
 def create_app() -> FastAPI:
@@ -15,6 +16,7 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
     app.include_router(authentication_router)
+    app.include_router(transport_router)
 
     @app.get("/health", tags=["platform"])
     def health() -> dict[str, str]:
