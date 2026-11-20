@@ -47,25 +47,64 @@ infra/local/         Local PostgreSQL and Supabase Auth Compose configuration
 
 Prerequisites: Python 3.11+, Node.js 20+, npm, and Docker Compose.
 
-1. Copy `infra/local/.env.example` to `infra/local/.env` and `.env.example` to `.env`. Set one local JWT secret in both files (`SUPABASE_JWT_SECRET` and `UTS_SUPABASE_JWT_SIGNING_KEY` must match). Never commit either `.env` file or real credentials.
+1. Copy `infra/local/.env.example` to `infra/local/.env` and `.env.example` to `.env`.
+   Set one local JWT secret in both files: `SUPABASE_JWT_SECRET` and
+   `UTS_SUPABASE_JWT_SIGNING_KEY` must have the same value. Never commit either
+   `.env` file or real credentials.
+
+   ```powershell
+   Copy-Item infra/local/.env.example infra/local/.env
+   Copy-Item .env.example .env
+   ```
+
 2. Start PostgreSQL and self-hosted Supabase Auth:
 
    ```powershell
    docker compose --env-file infra/local/.env -f infra/local/compose.yaml up -d
    ```
 
-3. Create and activate a Python virtual environment, then install backend development dependencies:
+   On a fresh local PostgreSQL volume, GoTrue may need its `auth` schema and a
+   `postgres` role before it can apply its own migrations. Only run the matching
+   command if the Supabase Auth logs report that the schema or role is missing:
+
+   ```powershell
+   docker compose --env-file infra/local/.env -f infra/local/compose.yaml exec -T postgres psql -U uzair_transport -d uzair_transport -c "CREATE SCHEMA IF NOT EXISTS auth;"
+   docker compose --env-file infra/local/.env -f infra/local/compose.yaml exec -T postgres psql -U uzair_transport -d uzair_transport -c "CREATE ROLE postgres WITH LOGIN SUPERUSER;"
+   docker compose --env-file infra/local/.env -f infra/local/compose.yaml up -d supabase-auth
+   ```
+
+   Check service state with:
+
+   ```powershell
+   docker compose --env-file infra/local/.env -f infra/local/compose.yaml ps
+   ```
+
+3. Create and activate a Python virtual environment, then install the backend
+   dependencies and the local ASGI server:
 
    ```powershell
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1
-   python -m pip install -e "backend[postgres,dev]"
+   python -m pip install -e "backend[postgres,dev]" "uvicorn>=0.30,<1.0"
    ```
 
-4. Apply migrations, replacing `<database-url>` with the local PostgreSQL URL:
+   When `python -m venv` was run with MSYS2 Python, use this activation command
+   instead of `Scripts\\Activate.ps1`:
 
    ```powershell
-   python backend/src/infrastructure/database/migrate.py <database-url>
+   . .\.venv\bin\Activate.ps1
+   ```
+
+4. Load the local backend settings into the PowerShell session and apply
+   migrations:
+
+   ```powershell
+   Get-Content .env | ForEach-Object {
+     if ($_ -match '^\s*([^#=]+)=(.*)$') {
+       Set-Item -Path "Env:$($matches[1].Trim())" -Value $matches[2].Trim()
+     }
+   }
+   python backend/src/infrastructure/database/migrate.py $env:UTS_DATABASE_URL
    ```
 
 5. Install JavaScript dependencies from the repository root:
@@ -74,31 +113,126 @@ Prerequisites: Python 3.11+, Node.js 20+, npm, and Docker Compose.
    npm install
    ```
 
-The first Transport Management account is manually provisioned through Supabase. After applying the migration, map that account's Supabase UUID to `transport_management` in `authentication_role_mappings`; this is a one-time bootstrap action, not a public endpoint:
+## Bootstrap the first Transport Management account
+
+The first management account is a one-time local bootstrap action. Public
+signup remains disabled, and the normal admin account-management routes only
+work after one account already has the `transport_management` role.
+
+The process has two parts:
+
+1. Create an email/password user through the local Supabase Auth admin API on
+   port `9999`. The request is authenticated with a short-lived service-role
+   JWT signed from `infra/local/.env`; the token is held only in the shell
+   process and is never saved to the repository.
+2. Insert the returned Supabase user UUID into the backend-owned
+   `authentication_role_mappings` table with the `transport_management` role.
+
+Run the following from the repository root after Docker and backend migrations
+are ready. Replace the example email and password before running it. Do not use
+the example password outside local development.
+
+```powershell
+$bootstrapEmail = "transport@example.test"
+$bootstrapPassword = "replace-with-a-strong-local-password"
+
+$localConfig = @{}
+Get-Content infra/local/.env | ForEach-Object {
+  if ($_ -match '^\s*([^#=]+)=(.*)$') {
+    $localConfig[$matches[1].Trim()] = $matches[2].Trim().Trim('"').Trim("'")
+  }
+}
+
+$env:UTS_SUPABASE_JWT_SIGNING_KEY = $localConfig['SUPABASE_JWT_SECRET']
+$env:BOOTSTRAP_EMAIL = $bootstrapEmail
+$env:BOOTSTRAP_PASSWORD = $bootstrapPassword
+
+$bootstrapUser = @'
+import json
+import os
+from datetime import UTC, datetime, timedelta
+
+import httpx
+import jwt
+
+token = jwt.encode(
+    {
+        "aud": "authenticated",
+        "exp": datetime.now(UTC) + timedelta(minutes=5),
+        "iss": "supabase",
+        "role": "service_role",
+    },
+    os.environ["UTS_SUPABASE_JWT_SIGNING_KEY"],
+    algorithm="HS256",
+)
+response = httpx.post(
+    "http://localhost:9999/admin/users",
+    headers={"Authorization": f"Bearer {token}"},
+    json={
+        "email": os.environ["BOOTSTRAP_EMAIL"],
+        "password": os.environ["BOOTSTRAP_PASSWORD"],
+        "email_confirm": True,
+    },
+    timeout=10,
+)
+response.raise_for_status()
+user = response.json()
+print(json.dumps({"id": user["id"], "email": user["email"]}))
+'@ | python | ConvertFrom-Json
+
+docker compose --env-file infra/local/.env -f infra/local/compose.yaml exec -T postgres psql -U uzair_transport -d uzair_transport -v ON_ERROR_STOP=1 -c "INSERT INTO authentication_role_mappings (supabase_user_id, role) VALUES ('$($bootstrapUser.id)', 'transport_management');"
+```
+
+The script confirms the email in local Supabase Auth and prints the returned
+UUID. It does not print the password or the temporary service-role token.
+
+If `UTS_SUPABASE_JWT_SIGNING_KEY` in `.env` differs from
+`SUPABASE_JWT_SECRET` in `infra/local/.env`, update the local files so they
+match before starting the backend. GoTrue signs login tokens with the latter,
+and the backend must validate those tokens with the same key.
+
+After the bootstrap mapping exists, Transport Management can create and
+deactivate other privileged role mappings through `/admin/accounts`. Do not
+create additional accounts by inserting passwords or sessions directly into the
+database.
+
+For reference, the role-mapping SQL used by the bootstrap is:
 
 ```sql
 INSERT INTO authentication_role_mappings (supabase_user_id, role)
 VALUES ('<Supabase user UUID>', 'transport_management');
 ```
 
-Credentials are never stored in this repository. Subsequent role mappings and deactivation use the Transport-Management-only `/admin/accounts` API boundary.
+Credentials are never stored in this repository.
 
 ## Run locally
 
-Open three terminals after setup:
+Open three terminals after setup. The first terminal must have the virtual
+environment active and the `.env` variables loaded:
 
 ```powershell
 # Backend (repository root)
-uvicorn src.application.main:app --app-dir backend --reload
+.\.venv\Scripts\Activate.ps1
+Get-Content .env | ForEach-Object {
+  if ($_ -match '^\s*([^#=]+)=(.*)$') {
+    Set-Item -Path "Env:$($matches[1].Trim())" -Value $matches[2].Trim()
+  }
+}
+python -m uvicorn src.application.main:app --app-dir backend --reload --port 8000
 
-# Public PWA
+# Public PWA (second terminal)
 npm run dev --workspace @uzair/public-pwa
 
-# Admin app
+# Admin app (third terminal)
 npm run dev --workspace @uzair/admin-web
 ```
 
-The public PWA runs on `http://localhost:3000`; the admin application runs on `http://localhost:3001`.
+When using an MSYS2-created virtual environment, replace the first backend
+command with `. .\.venv\bin\Activate.ps1`.
+
+The backend runs on `http://localhost:8000`, the public PWA on
+`http://localhost:3000`, and the admin application on `http://localhost:3001`.
+Check that the API is ready at `http://localhost:8000/health`.
 
 ## Run tests and checks
 
