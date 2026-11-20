@@ -1,0 +1,18 @@
+{
+  "name": "uzair-transport-service",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "test:e2e": "npm run test:e2e:public && npm run test:e2e:admin",
+    "test:e2e:public": "cypress run --spec \"apps/public-pwa/tests/**/*.cy.ts\"",
+    "test:e2e:admin": "cypress run --config baseUrl=http://localhost:3001 --spec \"apps/admin-web/tests/**/*.cy.ts\"",
+    "lint": "npm run lint --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "build": "npm run build --workspaces"
+  },
+  "devDependencies": {
+    "@testing-library/cypress": "^10.0.3",
+    "cypress": "^14.0.0",
+    "typescript": "^5.7.0"
+  }
+}

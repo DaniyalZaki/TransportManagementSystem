@@ -47,7 +47,7 @@ infra/local/         Local PostgreSQL and Supabase Auth Compose configuration
 
 Prerequisites: Python 3.11+, Node.js 20+, npm, and Docker Compose.
 
-1. Copy `infra/local/.env.example` to `infra/local/.env` and set a local JWT secret. Never commit this file or real credentials.
+1. Copy `infra/local/.env.example` to `infra/local/.env` and `.env.example` to `.env`. Set one local JWT secret in both files (`SUPABASE_JWT_SECRET` and `UTS_SUPABASE_JWT_SIGNING_KEY` must match). Never commit either `.env` file or real credentials.
 2. Start PostgreSQL and self-hosted Supabase Auth:
 
    ```powershell
@@ -59,7 +59,7 @@ Prerequisites: Python 3.11+, Node.js 20+, npm, and Docker Compose.
    ```powershell
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1
-   python -m pip install -e "backend[dev]"
+   python -m pip install -e "backend[postgres,dev]"
    ```
 
 4. Apply migrations, replacing `<database-url>` with the local PostgreSQL URL:
@@ -74,7 +74,14 @@ Prerequisites: Python 3.11+, Node.js 20+, npm, and Docker Compose.
    npm install
    ```
 
-The first Transport Management account is manually provisioned through Supabase. Its user ID is then mapped to `transport_management` in the backend `authentication_role_mappings` table. Credentials are never stored in this repository.
+The first Transport Management account is manually provisioned through Supabase. After applying the migration, map that account's Supabase UUID to `transport_management` in `authentication_role_mappings`; this is a one-time bootstrap action, not a public endpoint:
+
+```sql
+INSERT INTO authentication_role_mappings (supabase_user_id, role)
+VALUES ('<Supabase user UUID>', 'transport_management');
+```
+
+Credentials are never stored in this repository. Subsequent role mappings and deactivation use the Transport-Management-only `/admin/accounts` API boundary.
 
 ## Run locally
 
@@ -99,8 +106,8 @@ The public PWA runs on `http://localhost:3000`; the admin application runs on `h
 # Backend tests (from backend/)
 python -m pytest
 
-# Backend lint (repository root)
-ruff check backend
+# Backend lint (from backend/)
+python -m flake8 src tests
 
 # Client checks (repository root)
 npm run typecheck
