@@ -54,6 +54,17 @@ Both privileged roles may manage transport data; only `transport_management` may
 
 Publish request: `{"expected_base_published_change_set_id":"cs_01","publish_anyway":false}`. A changed base returns `409 stale_change_set`; success returns the new published change-set ID and publication time.
 
+### Slice 2 delivery
+
+Slice 2 exposes authenticated draft create/read/update, validation, rebase,
+publication history, direct whole-change-set recovery, and publication
+endpoints. A draft update contains the complete snapshot and its
+`expected_version`; a stale write returns `409`. Publication and recovery write
+the current pointer and Audit publication record in one PostgreSQL transaction,
+then invalidate the single-worker read cache synchronously. The hourly
+single-worker lifecycle job expires drafts and physically deletes retired
+published snapshots after their respective 30-day periods.
+
 ## Announcements, banners, and accounts
 
 | Method and path | Purpose |

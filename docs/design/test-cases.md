@@ -13,7 +13,7 @@ Use Pytest for domain/repository/API integration; Cypress for public/admin workf
 | TD-05 | API | Public read during drafts | Only active published change set returned. |
 | TD-06 | API | Incomplete/conflicting draft | Warnings; save works; publish needs confirmation. |
 | TD-07 | Integration | One of two same-base drafts publishes | Other receives stale conflict until rebase. |
-| TD-08 | Transaction | Successful publish | Pointer, snapshot, audit row, cache invalidation are atomic. |
+| TD-08 | Transaction | Successful publish/recovery | Pointer, snapshot, and audit row commit together; cache invalidates after commit. |
 | TD-09 | Transaction | Publish fails before commit | No public pointer/audit record leaks. |
 | TD-10 | Retention | Draft reaches 30 days | Expires; cannot publish/recover. |
 | TD-11 | Unit | A UTC instant crosses into a different PKT calendar date | Service-date selection uses `Asia/Karachi`, never the server local zone. |
@@ -58,6 +58,22 @@ Use Pytest for domain/repository/API integration; Cypress for public/admin workf
 | TD-01, TD-02, TD-03, TD-04, TD-11, TD-12, TD-13, TD-14 | `backend/tests/unit/test_transport_schedule.py` | Passed — 6 tests, 2026-11-20 |
 | TD-05, TD-15, TD-16 | `backend/tests/integration/test_public_transport_api.py` | Passed — 2 tests, 2026-11-20 |
 | PW-08 | `apps/public-pwa/tests/transport-home.cy.ts` | Passed — Cypress, 2026-11-20 |
+
+## S2 implementation verification record
+
+| ID | Automated evidence | Result |
+|---|---|---|
+| TD-06 | `backend/tests/unit/test_transport_change_sets.py` | Passed — warning detection and explicit publish confirmation, 2026-11-20 |
+| TD-07 | `backend/tests/unit/test_transport_change_sets.py` | Passed — stale publication rejection and rebase baseline replacement, 2026-11-20 |
+| TD-08 | `backend/tests/unit/test_transport_change_sets.py` | Passed at service boundary — pointer advance, publication-record invocation, cache invalidation, 2026-11-20 |
+| AU-01, AU-02 | `backend/tests/integration/test_transport_change_set_api_contract.py` | Passed — privileged route contract is present; full HTTP authorization integration remains pending, 2026-11-20 |
+| TD-06, TD-07, TD-10, AD-02, AD-03 | `backend/tests/unit/test_transport_change_sets.py` | Passed — optimistic draft save, expiry rejection, rebase, whole-published-snapshot recovery, and role gate, 2026-11-20 |
+| API contract | `backend/tests/integration/test_transport_change_set_api_contract.py` | Passed — draft read/update, publication history, recovery, confirmation, and versioned-save schemas, 2026-11-20 |
+
+Database transaction behavior is implemented in the PostgreSQL adapter: Audit
+joins the Transport Data transaction for both normal publication and recovery.
+The repository-level database integration remains part of Slice 6 release
+verification alongside the required performance benchmark.
 
 ## Release evidence
 
