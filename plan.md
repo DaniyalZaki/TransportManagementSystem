@@ -1,7 +1,7 @@
 # Implementation Plan
 
-- **Version:** 1.1
-- **Status:** S0 complete; S1 is ready to begin when authorized
+- **Version:** 1.2
+- **Status:** S0 and S1 complete
 - **Source of truth:** `PRD.md`, `architecture.md`, `AGENTS.md`, and ADR-011
 - **History:** Git preserves every revision. A frozen copy of each accepted
   version is stored in `docs/plan-versions/`.
@@ -171,7 +171,7 @@ hosting decision enables RTO/RPO verification.
 | Slice | Status | Evidence / next gate |
 |---|---|---|
 | S0 | Complete | Reviewed and pushed: FastAPI/auth/cache, local PostgreSQL/Supabase boundaries, separate Next.js clients, and Pytest/Cypress foundations; all current checks pass |
-| S1 | Not started | S0 dependency satisfied; begin when authorized |
+| S1 | Complete | Published-only PostgreSQL read model, PKT schedule/current-departure API, responsive public views, and automated verification are complete |
 | S2 | Not started | Depends on S0 and S1 |
 | S3 | Not started | Depends on S0/S1 APIs |
 | S4 | Not started | Depends on S0 SMTP configuration boundary |

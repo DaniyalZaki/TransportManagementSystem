@@ -118,7 +118,8 @@ npm run build
 npm run test:e2e
 ```
 
-The foundation contains only its currently implemented test surface. Planned coverage and acceptance cases are in [docs/design/test-cases.md](docs/design/test-cases.md).
+Slice 0 and Slice 1 test coverage is implemented. Planned and executed acceptance
+evidence is maintained in [docs/design/test-cases.md](docs/design/test-cases.md).
 
 ## Important documentation
 

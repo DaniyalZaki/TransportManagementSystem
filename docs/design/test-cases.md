@@ -2,7 +2,7 @@
 
 ## Strategy
 
-Use Pytest for domain/repository/API integration; Cypress for public/admin workflows and PWA behavior; a load tool selected during S6 for the approved benchmark. Synthetic data only. These are planned cases, not passed-check evidence.
+Use Pytest for domain/repository/API integration; Cypress for public/admin workflows and PWA behavior; a load tool selected during S6 for the approved benchmark. Synthetic data only. These are planned cases, not passed-check evidence. S1 implementation evidence is recorded beside its cases after the relevant checks have run.
 
 | ID | Layer | Scenario | Expected result |
 |---|---|---|---|
@@ -16,6 +16,13 @@ Use Pytest for domain/repository/API integration; Cypress for public/admin workf
 | TD-08 | Transaction | Successful publish | Pointer, snapshot, audit row, cache invalidation are atomic. |
 | TD-09 | Transaction | Publish fails before commit | No public pointer/audit record leaks. |
 | TD-10 | Retention | Draft reaches 30 days | Expires; cannot publish/recover. |
+| TD-11 | Unit | A UTC instant crosses into a different PKT calendar date | Service-date selection uses `Asia/Karachi`, never the server local zone. |
+| TD-12 | Unit | Exactly at a scheduled departure | That departure is next-upcoming (inclusive comparison). |
+| TD-13 | Unit | Multiple published route–bus assignments, including one with no remaining time | Every assignment pair is represented; exhausted pairs use `no_further_departures_today`. |
+| TD-14 | Unit | Partial override adds/removes a Route–Bus–time match | Only its matching entry changes; a time change is represented by remove plus add. |
+| TD-15 | API | Public current-departures and schedule reads | Both are unauthenticated, only use the current published snapshot, and return PKT ISO timestamps. |
+| TD-16 | API | Published data contains no timetable entries for an assignment | It remains visible in current departures as `no_further_departures_today`; no incomplete/conflict warning is exposed publicly. |
+| PW-08 | Cypress | Public transport page with successful published-read responses | Current-departure cards and today-only schedule render route, bus, separately maintained route information, and the no-further state without a sign-in prompt. |
 | AU-01 | API | Public/unauthenticated privileged request | `401`/`403`; no mutation. |
 | AU-02 | API | Both privileged roles publish | Succeed within documented roles. |
 | AU-03 | API | Designated admin manages account | `403`; Transport Management only. |
@@ -43,6 +50,14 @@ Use Pytest for domain/repository/API integration; Cypress for public/admin workf
 | PW-06 | Cypress | Cache >24 hours | Unavailable offline. |
 | PW-07 | Cypress | Reconnection | Sync attempts; warnings clear only after success. |
 | UX-01 | Cypress/a11y | Mobile/keyboard/semantic check | Core workflows usable and accessible. |
+
+## S1 verification record
+
+| ID | Automated evidence | Result |
+|---|---|---|
+| TD-01, TD-02, TD-03, TD-04, TD-11, TD-12, TD-13, TD-14 | `backend/tests/unit/test_transport_schedule.py` | Passed — 6 tests, 2026-11-20 |
+| TD-05, TD-15, TD-16 | `backend/tests/integration/test_public_transport_api.py` | Passed — 2 tests, 2026-11-20 |
+| PW-08 | `apps/public-pwa/tests/transport-home.cy.ts` | Passed — Cypress, 2026-11-20 |
 
 ## Release evidence
 
