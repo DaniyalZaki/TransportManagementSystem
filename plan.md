@@ -1,7 +1,7 @@
 # Implementation Plan
 
-- **Version:** 1.0
-- **Status:** Approved planning baseline; implementation not started
+- **Version:** 1.1
+- **Status:** S0 complete; S1 is ready to begin when authorized
 - **Source of truth:** `PRD.md`, `architecture.md`, `AGENTS.md`, and ADR-011
 - **History:** Git preserves every revision. A frozen copy of each accepted
   version is stored in `docs/plan-versions/`.
@@ -170,8 +170,8 @@ hosting decision enables RTO/RPO verification.
 
 | Slice | Status | Evidence / next gate |
 |---|---|---|
-| S0 | Not started | Await project-structure approval before code creation |
-| S1 | Not started | Depends on S0 |
+| S0 | Complete | Reviewed and pushed: FastAPI/auth/cache, local PostgreSQL/Supabase boundaries, separate Next.js clients, and Pytest/Cypress foundations; all current checks pass |
+| S1 | Not started | S0 dependency satisfied; begin when authorized |
 | S2 | Not started | Depends on S0 and S1 |
 | S3 | Not started | Depends on S0/S1 APIs |
 | S4 | Not started | Depends on S0 SMTP configuration boundary |
