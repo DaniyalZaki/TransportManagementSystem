@@ -62,6 +62,16 @@ Modules expose application services/DTOs rather than querying another module’s
 
 **Publish transport:** validate JWT/role; verify draft expiry/base and warnings; atomically promote snapshot/current pointer, retire the old pointer, write one publication record, and invalidate cache before success returns.
 
+**Slice 2 delivery:** The Transport Data change-set application service owns
+draft creation/read/update, validation, stale-baseline rejection/rebase,
+explicit warning confirmation, recovery invocation, and published-cache
+invalidation. The PostgreSQL adapter updates a draft snapshot only at its
+expected version, moves the published pointer, retires its predecessor, and
+calls Audit’s transaction-joining publication interface. Audit owns the
+publication record and recovery eligibility window. The sole FastAPI worker
+runs hourly draft-expiry, expired-publication-record, and retired-record
+cleanup; cleanup failure never stops serving public reads.
+
 **Feedback:** reject populated honeypot; check normalized 10-minute duplicate window; persist and attempt SMTP; on initial failure retain, show error, and schedule only 1-, 5-, and 30-minute retries.
 
 **Urgent operations:** direct publication creates announcement; urgent flow also creates independent banner. Announcement expiry never ends banner visibility; explicit remove/resolve does.
