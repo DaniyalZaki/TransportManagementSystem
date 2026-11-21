@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { SignInForm } from "../components/sign-in-form";
 
@@ -8,7 +8,7 @@ const apiBaseUrl = process.env.NEXT_PUBLIC_UTS_API_BASE_URL ?? "http://localhost
 
 type Notice = { tone: "error" | "success" | "warning"; text: string };
 type ChangeSet = {
-  id: string; name: string; version: number; expires_at: string;
+  id: string; name: string; version: number; operation_order?: number | null;
   base_published_change_set_id: string | null;
 };
 type Publication = { change_set_id: string; publisher: string; published_at: string };
@@ -31,14 +31,13 @@ function SelectPair({ value, onChange, routes, buses }: { value: Assignment; onC
 }
 
 export default function AdminHome() {
-  const [draftName, setDraftName] = useState("");
   const [notice, setNotice] = useState<Notice>();
-  const [isCreating, setIsCreating] = useState(false);
   const [changeSet, setChangeSet] = useState<ChangeSet>();
   const [snapshot, setSnapshot] = useState<Snapshot>(emptySnapshot);
+  const [savedSnapshot, setSavedSnapshot] = useState<Snapshot>(emptySnapshot);
   const [isSaving, setIsSaving] = useState(false);
   const [publications, setPublications] = useState<Publication[]>([]);
-  const [draftMatches, setDraftMatches] = useState<ChangeSet[]>([]);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
   const [tab, setTab] = useState<Tab>("Routes");
   const [route, setRoute] = useState<Route>({ route_code: "", origin: "", destination: "", direction: "" });
@@ -63,39 +62,26 @@ export default function AdminHome() {
     return token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : undefined;
   }
 
-  async function createDraft(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function openDraft() {
     if (!headers()) {
-      setNotice({ tone: "warning", text: "Sign in before creating a transport change set." });
+      setNotice({ tone: "warning", text: "Sign in before opening the working draft." });
       return;
     }
-    setIsCreating(true);
     setNotice(undefined);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/admin/transport/change-sets`, {
-        method: "POST",
-        headers: headers(),
-        body: JSON.stringify({ name: draftName }),
-      });
-      const body = (await response.json()) as ChangeSet & { detail?: string };
+      const response = await fetch(`${apiBaseUrl}/api/v1/admin/transport/draft`, { headers: headers() });
+      const body = (await response.json()) as DraftResponse & { detail?: string };
       if (!response.ok) {
-        setNotice({ tone: "error", text: body.detail ?? "The draft could not be created." });
+        setNotice({ tone: "error", text: body.detail ?? "The working draft could not be opened." });
       } else {
-        setNotice({
-          tone: "success",
-          text: `${body.name} is a draft. It expires ${new Date(body.expires_at ?? "").toLocaleDateString()}.`,
-        });
-        const draft = await fetch(`${apiBaseUrl}/api/v1/admin/transport/change-sets/${body.id}`, { headers: headers() });
-        const loaded = (await draft.json()) as DraftResponse;
-        setChangeSet(loaded);
-        setSnapshot(loaded.snapshot);
+        setNotice({ tone: "success", text: "Working draft opened. Changes remain private until published." });
+        setChangeSet(body);
+        setSnapshot(body.snapshot);
+        setSavedSnapshot(body.snapshot);
         setTab("Routes");
-        setDraftName("");
       }
     } catch {
-      setNotice({ tone: "error", text: "The draft could not be created. Check the backend connection and try again." });
-    } finally {
-      setIsCreating(false);
+      setNotice({ tone: "error", text: "The working draft could not be opened. Check the backend connection and try again." });
     }
   }
 
@@ -124,20 +110,41 @@ export default function AdminHome() {
   async function saveDraft() {
     if (!changeSet) return;
     setIsSaving(true);
-    const body = await requestDraft(`change-sets/${changeSet.id}`, {
+    const body = await requestDraft("draft", {
       method: "PATCH", body: JSON.stringify({ ...snapshot, expected_version: changeSet.version }),
     });
-    if (body) { setChangeSet(body); setNotice({ tone: "success", text: "Draft saved privately. Publish when the route assignments are complete." }); }
+    if (body) {
+      setChangeSet(body);
+      setSavedSnapshot(snapshot);
+      setNotice({ tone: "success", text: `Draft saved privately (operation ${body.operation_order}).` });
+    }
     setIsSaving(false);
   }
 
   async function publishDraft() {
     if (!changeSet) return;
-    let body = await requestDraft(`change-sets/${changeSet.id}/publish`, { method: "POST", body: JSON.stringify({ expected_base_published_change_set_id: changeSet.base_published_change_set_id, publish_anyway: false }) });
-    if (!body && window.confirm("Warnings may exist. Publish anyway?")) {
-      body = await requestDraft(`change-sets/${changeSet.id}/publish`, { method: "POST", body: JSON.stringify({ expected_base_published_change_set_id: changeSet.base_published_change_set_id, publish_anyway: true }) });
+    const publish = async (publishAnyway: boolean) => {
+      const response = await fetch(`${apiBaseUrl}/api/v1/admin/transport/draft/publish`, {
+        method: "POST", headers: headers(),
+        body: JSON.stringify({ publish_anyway: publishAnyway }),
+      });
+      return { response, body: await response.json() as ChangeSet & { detail?: string | { code?: string; warnings?: { message: string }[] } } };
+    };
+    try {
+      let { response, body } = await publish(false);
+      if (!response.ok && typeof body.detail === "object" && body.detail?.code === "publish_confirmation_required") {
+        const summary = body.detail.warnings?.map((warning) => warning.message).join("\n") ?? "A route is missing from the schedule.";
+        if (window.confirm(`${summary}\n\nPublish anyway?`)) ({ response, body } = await publish(true));
+      }
+      if (!response.ok) {
+        setNotice({ tone: "error", text: typeof body.detail === "string" ? body.detail : "The draft could not be published." });
+        return;
+      }
+      setChangeSet(body);
+      setNotice({ tone: "success", text: `Published atomically (operation ${body.operation_order}); the public cache was refreshed.` });
+    } catch {
+      setNotice({ tone: "error", text: "The publish request could not reach the backend. Check the connection and try again." });
     }
-    if (body) { setChangeSet(body); setNotice({ tone: "success", text: "Published atomically; the public cache was refreshed." }); }
   }
 
   async function loadPublications() {
@@ -152,6 +159,7 @@ export default function AdminHome() {
         return;
       }
       setPublications((await response.json() as { publications: Publication[] }).publications);
+      setHistoryExpanded(true);
     } catch {
       setNotice({ tone: "error", text: "Publication history could not be loaded. Check the backend connection and try again." });
     }
@@ -162,15 +170,6 @@ export default function AdminHome() {
     if (body) { setNotice({ tone: "success", text: "The published change set was recovered as the active transport data." }); await loadPublications(); }
   }
 
-  async function searchDrafts() {
-    const body = await requestDraft(`change-sets?query=${encodeURIComponent(draftName)}`) as { change_sets?: ChangeSet[] } | undefined;
-    if (body) setDraftMatches(body.change_sets ?? []);
-  }
-
-  async function openDraft(changeSetId: string) {
-    const body = await requestDraft(`change-sets/${changeSetId}`) as DraftResponse | undefined;
-    if (body) { setChangeSet(body); setSnapshot(body.snapshot); setTab("Routes"); setDraftMatches([]); setNotice({ tone: "success", text: `${body.name} was loaded for editing.` }); }
-  }
 
   function addRoute() {
     if (!Object.values(route).every(Boolean)) return setNotice({ tone: "warning", text: "Complete every route field before adding it." });
@@ -198,6 +197,8 @@ export default function AdminHome() {
     setSnapshot((current) => ({ ...current, overrides: [...current.overrides, override] }));
   }
 
+  const hasUnsavedChanges = JSON.stringify(snapshot) !== JSON.stringify(savedSnapshot);
+
   return (
     <main className="admin-shell">
       <header className="admin-header">
@@ -214,10 +215,11 @@ export default function AdminHome() {
           <SignInForm onSignedIn={() => setSignedIn(true)} />
         </section> : null}
         {signedIn ? <>
-        {changeSet ? <section className="admin-card workflow-card" aria-labelledby="editor-heading">
+        {changeSet ? <section className="admin-card workflow-card workspace-card" aria-labelledby="editor-heading">
           <p className="eyebrow">Draft editor</p>
           <h2 id="editor-heading">{changeSet.name}</h2>
-          <p className="muted-copy">Version {changeSet.version}. Save changes privately before validating or publishing.</p>
+          <p className="muted-copy">Save changes privately before publishing. Saves and publications are processed one at a time.</p>
+          {notice ? <p className={`notice notice-${notice.tone}`} role="status">{notice.text}</p> : null}
           <div className="workspace-tabs" role="tablist" aria-label="Draft data sections">
             {tabs.map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} className={tab === item ? "active-tab" : "secondary-action"} onClick={() => setTab(item)}>{item}</button>)}
           </div>
@@ -227,37 +229,28 @@ export default function AdminHome() {
           {tab === "Schedule" ? <div className="editor-panel"><div className="editor-fields"><select aria-label="Route" value={departure.route_code} onChange={(e) => setDeparture((current) => ({ ...current, route_code: e.target.value }))}><option value="">Select route</option>{snapshot.routes.map((item) => <option key={item.route_code} value={item.route_code}>{item.route_code}</option>)}</select><select aria-label="Weekday" value={departure.weekday} onChange={(e) => setDeparture((current) => ({ ...current, weekday: Number(e.target.value) }))}>{["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day, i) => <option key={day} value={i + 1}>{i + 1} — {day}</option>)}</select><input aria-label="Departure time" inputMode="numeric" pattern="[0-9]{2}:[0-9]{2}" placeholder="HH:MM" value={departure.departure_time} onChange={(e) => setDeparture((current) => ({ ...current, departure_time: e.target.value }))} /></div><p className="assignment-summary">Assigned buses: {snapshot.assignments.filter((item) => item.route_code === departure.route_code).map((item) => item.bus_identifier).join(", ") || "No buses assigned to this route yet."}</p><button type="button" onClick={addDeparture}>Add recurring departure</button><DataTable rows={snapshot.weekly_departures.map((item) => ({ ...item, buses: snapshot.assignments.filter((assignment) => assignment.route_code === item.route_code).map((assignment) => assignment.bus_identifier).join(", ") || "No buses assigned" }))} columns={["weekday", "route_code", "buses", "departure_time"]} onRemove={(i) => setSnapshot((s) => ({ ...s, weekly_departures: s.weekly_departures.filter((_, index) => index !== i) }))} /></div> : null}
           <div className="action-row">
             <button type="button" onClick={saveDraft} disabled={isSaving}>{isSaving ? "Saving…" : "Save draft"}</button>
-            <button type="button" onClick={publishDraft}>Publish</button>
+            <button type="button" onClick={publishDraft} disabled={hasUnsavedChanges || isSaving} title={hasUnsavedChanges ? "Save Draft before publishing." : undefined}>Publish</button>
           </div>
         </section> : null}
-        <section className="admin-card workflow-card" aria-labelledby="history-heading">
-          <div className="section-heading"><div><p className="eyebrow">Audit</p><h2 id="history-heading">Publication history</h2></div><button type="button" className="secondary-action" onClick={loadPublications}>Load history</button></div>
-          <p className="muted-copy">Publication records retain only publisher and publication time for 30 days. Recovery publishes a whole historical snapshot.</p>
-          {publications.map((publication) => <div className="publication" key={publication.change_set_id}><span>{new Date(publication.published_at).toLocaleString()}</span><span>{publication.publisher}</span><button type="button" className="secondary-action" onClick={() => recover(publication.change_set_id)}>Recover</button></div>)}
+        <section className="admin-card workflow-card history-card" aria-labelledby="history-heading">
+          <div className="section-heading"><div><p className="eyebrow">Audit</p><h2 id="history-heading">Publication history</h2></div><button type="button" className="secondary-action action-button" aria-expanded={historyExpanded} aria-controls="publication-history" onClick={historyExpanded ? () => setHistoryExpanded(false) : loadPublications}>{historyExpanded ? "Hide history" : "Load history"}</button></div>
+          {historyExpanded ? <div id="publication-history"><p className="muted-copy">Publication records retain only publisher and publication time for 30 days. Recovery publishes a whole historical snapshot.</p>{publications.map((publication) => <div className="publication" key={publication.change_set_id}><span>{new Date(publication.published_at).toLocaleString()}</span><span>{publication.publisher}</span><button type="button" className="secondary-action" onClick={() => recover(publication.change_set_id)}>Recover</button></div>)}</div> : null}
         </section>
-        <section className="admin-card" aria-labelledby="draft-heading">
-          <div className="section-heading">
-            <div><p className="eyebrow">Change sets</p><h2 id="draft-heading">Start a draft</h2></div>
-            <span className="status-pill">Drafts expire after 30 days</span>
-          </div>
-          <p className="muted-copy">A draft starts from the current published timetable. It remains private until an authorized user reviews warnings and separately publishes it.</p>
-          <form className="draft-form" onSubmit={createDraft}>
-            <label htmlFor="change-set-name">Change-set name</label>
-            <input id="change-set-name" maxLength={160} onChange={(event) => setDraftName(event.target.value)} placeholder="e.g. Spring timetable" required value={draftName} />
-            <div className="draft-actions"><button disabled={isCreating} type="submit">{isCreating ? "Creating draft…" : "Create draft"}</button><button type="button" className="secondary-action" onClick={searchDrafts}>Search drafts</button></div>
-          </form>
-          {draftMatches.length ? <ul className="draft-results" aria-label="Matching drafts">{draftMatches.map((draft) => <li key={draft.id}><span><strong>{draft.name}</strong><small>Version {draft.version} · expires {new Date(draft.expires_at).toLocaleDateString()}</small></span><button type="button" className="secondary-action" onClick={() => openDraft(draft.id)}>Open</button></li>)}</ul> : null}
+        {!changeSet ? <section className="admin-card workspace-card" aria-labelledby="draft-heading">
+          <div className="section-heading"><div><p className="eyebrow">Working copy</p><h2 id="draft-heading">Shared draft</h2></div><span className="status-pill">Never expires</span></div>
+          <p className="muted-copy">All routes, buses, assignments, and schedules are edited in one shared draft. It stays private until an authorized user publishes it.</p>
+          <button type="button" className="secondary-action action-button" onClick={openDraft}>Open Draft</button>
           {notice ? <p className={`notice notice-${notice.tone}`} role="status">{notice.text}</p> : null}
-        </section>
-        <section className="admin-card workflow-card" aria-labelledby="publish-heading">
+        </section> : null}
+        <section className="admin-card workflow-card protected-card" aria-labelledby="publish-heading">
           <p className="eyebrow">Protected publication</p>
           <h2 id="publish-heading">Review before publishing</h2>
           <ol>
             <li>Save routes, buses, assignments, and PKT schedule changes to the draft.</li>
-            <li>Publishing surfaces any incomplete-assignment warning and requires confirmation.</li>
-            <li>Use the separate publish confirmation only when the correct baseline is current.</li>
+            <li>Publishing warns only when a route has no recurring schedule entry.</li>
+            <li>Accepting that warning publishes the current working draft.</li>
           </ol>
-          <p className="muted-copy">If another change set publishes first, this workspace requires a rebase. Published transport data is never changed by saving a draft.</p>
+          <p className="muted-copy">Saving never changes public transport data. Save and publish requests receive a temporary operation number in their execution order.</p>
         </section>
         </> : null}
       </div>

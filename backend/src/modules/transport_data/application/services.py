@@ -1,4 +1,7 @@
-from datetime import UTC, date, datetime, timedelta
+import asyncio
+from dataclasses import dataclass, replace
+from datetime import UTC, date, datetime
+from typing import ClassVar
 from uuid import uuid4
 
 from src.application.authorization.roles import Principal, Role
@@ -48,11 +51,27 @@ class PublicTransportService:
 class ChangeSetConflict(ValueError):
     """A draft cannot be saved or published against its current baseline."""
 
+    def __init__(self, message: str, operation_order: int | None = None) -> None:
+        super().__init__(message)
+        self.operation_order = operation_order
+
 
 class PublishConfirmationRequired(ValueError):
     def __init__(self, warnings: tuple[TransportWarning, ...]) -> None:
         super().__init__("publish_anyway confirmation is required for schedule warnings")
         self.warnings = warnings
+
+
+@dataclass(frozen=True, slots=True)
+class PublicationResult:
+    draft: TransportChangeSet
+    published_change_set_id: object
+    published_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class SerializedDraftResult:
+    draft: TransportChangeSet
 
 
 class TransportChangeSetService:
@@ -62,6 +81,9 @@ class TransportChangeSetService:
     moves the pointer. The service deliberately invalidates cache only after a
     successful transaction and only after Audit has recorded publication.
     """
+
+    _mutation_lock: ClassVar[asyncio.Lock | None] = None
+    _next_operation_order: ClassVar[int] = 1
 
     def __init__(
         self,
@@ -75,13 +97,11 @@ class TransportChangeSetService:
         self._cache = cache
         self._clock = clock
 
-    async def create_draft(
-        self, name: str, principal: Principal | None = None
-    ) -> TransportChangeSet:
+    async def open_draft(self, principal: Principal | None = None) -> TransportChangeSet:
         self._require_privileged(principal)
-        normalized_name = name.strip()
-        if not normalized_name:
-            raise ValueError("A change-set name is required")
+        existing = await self._change_sets.working_draft()
+        if existing is not None:
+            return existing
         current = await self._change_sets.current_published()
         if current is None:
             snapshot = DraftTransportSnapshot((), (), (), (), ())
@@ -91,20 +111,24 @@ class TransportChangeSetService:
             base_id = current.id
         now = self._clock()
         draft = TransportChangeSet(
-            id=uuid4(), name=normalized_name, status=TransportChangeSetStatus.DRAFT,
+            id=uuid4(), name="Working draft", status=TransportChangeSetStatus.DRAFT,
             version=1, base_published_change_set_id=base_id, created_at=now,
-            updated_at=now, expires_at=now + timedelta(days=30),
+            updated_at=now, expires_at=datetime.max.replace(tzinfo=UTC),
         )
         try:
             return await self._change_sets.create(draft, snapshot)
         except Exception as error:
             if "unique" in str(error).lower() or "duplicate" in str(error).lower():
-                raise ChangeSetConflict("A change set with this name already exists") from error
+                # A concurrent Open Draft won the race; return that one.
+                existing = await self._change_sets.working_draft()
+                if existing is not None:
+                    return existing
+                raise ChangeSetConflict("Unable to initialize the working draft") from error
             raise
 
     async def expire_drafts(self) -> int:
-        """Called by the single-worker lifecycle job before privileged operations."""
-        return await self._change_sets.expire_drafts(self._clock())
+        """The permanent working draft is deliberately exempt from expiry."""
+        return 0
 
     async def delete_retired(self) -> int:
         return await self._change_sets.delete_retired(self._clock())
@@ -112,46 +136,56 @@ class TransportChangeSetService:
     async def validate(self, change_set_id) -> tuple[TransportWarning, ...]:
         change_set = await self._required_draft(change_set_id)
         snapshot = await self._change_sets.snapshot(change_set.id)
-        assigned_routes = {item.route_code for item in snapshot.assignments}
+        scheduled_routes = {item.route_code for item in snapshot.weekly_departures}
         warnings: list[TransportWarning] = []
-        for departure in snapshot.weekly_departures:
-            if departure.route_code not in assigned_routes:
+        for route in snapshot.routes:
+            if route.route_code not in scheduled_routes:
                 warnings.append(TransportWarning(
-                    "missing_assignment",
-                    f"{departure.route_code} at {departure.departure_time.isoformat()} "
-                    "has no assigned buses",
+                    "missing_schedule",
+                    f"{route.route_code} has no recurring schedule entry",
                 ))
         return tuple(warnings)
 
     async def publish(
-        self, change_set_id, expected_base_id, publish_anyway: bool, publisher: str,
+        self, change_set_id, publish_anyway: bool, publisher: str,
         principal: Principal | None = None,
-    ) -> TransportChangeSet:
+    ) -> PublicationResult:
         self._require_privileged(principal)
-        draft = await self._required_draft(change_set_id)
-        current = await self._change_sets.current_published()
-        current_id = current.id if current else None
-        if draft.base_published_change_set_id != current_id or expected_base_id != current_id:
-            raise ChangeSetConflict("stale_change_set: rebase before publishing")
-        warnings = await self.validate(change_set_id)
-        if warnings and not publish_anyway:
-            raise PublishConfirmationRequired(warnings)
-        published_at = self._clock()
-        published = await self._change_sets.publish(
-            change_set_id, expected_base_id, publisher, published_at, self._audit
-        )
-        self._cache.invalidate_published_transport()
-        return published
+        async with self._mutation_gate() as operation_order:
+            try:
+                await self._required_draft(change_set_id)
+                warnings = await self.validate(change_set_id)
+                if warnings and not publish_anyway:
+                    raise PublishConfirmationRequired(warnings)
+                published_at = self._clock()
+                updated_draft, published_id = await self._change_sets.publish(
+                    change_set_id, publisher, published_at, self._audit
+                )
+                self._cache.invalidate_published_transport()
+                return PublicationResult(
+                    replace(updated_draft, operation_order=operation_order),
+                    published_id,
+                    published_at,
+                )
+            except ChangeSetConflict as error:
+                raise ChangeSetConflict(str(error), operation_order) from error
 
     async def replace_snapshot(
         self, change_set_id, expected_version: int, snapshot: DraftTransportSnapshot,
         principal: Principal | None = None,
-    ) -> TransportChangeSet:
+    ) -> SerializedDraftResult:
         self._require_privileged(principal)
-        await self._required_draft(change_set_id)
-        return await self._change_sets.replace_snapshot(
-            change_set_id, expected_version, snapshot, self._clock()
-        )
+        async with self._mutation_gate() as operation_order:
+            try:
+                await self._required_draft(change_set_id)
+                draft = await self._change_sets.replace_snapshot(
+                    change_set_id, expected_version, snapshot, self._clock()
+                )
+                return SerializedDraftResult(
+                    replace(draft, operation_order=operation_order)
+                )
+            except ChangeSetConflict as error:
+                raise ChangeSetConflict(str(error), operation_order) from error
 
     async def get_draft(
         self, change_set_id, principal: Principal | None = None,
@@ -159,12 +193,6 @@ class TransportChangeSetService:
         self._require_privileged(principal)
         change_set = await self._required_draft(change_set_id)
         return change_set, await self._change_sets.snapshot(change_set_id)
-
-    async def search_drafts(
-        self, query: str, principal: Principal | None = None,
-    ) -> list[TransportChangeSet]:
-        self._require_privileged(principal)
-        return await self._change_sets.search_drafts(query)
 
     async def recover(
         self, source_change_set_id, publisher: str,
@@ -208,9 +236,29 @@ class TransportChangeSetService:
             raise ChangeSetConflict("Change set does not exist")
         if change_set.status is not TransportChangeSetStatus.DRAFT:
             raise ChangeSetConflict("Only an active draft can be changed or published")
-        if change_set.expires_at <= self._clock():
-            raise ChangeSetConflict("Draft has expired")
         return change_set
+
+    @classmethod
+    def _mutation_gate(cls):
+        """Serialize save/publish operations in this approved single worker.
+
+        The counter is intentionally process-local and only identifies the
+        temporary order in which the working-draft mutation executed.
+        """
+        if cls._mutation_lock is None:
+            cls._mutation_lock = asyncio.Lock()
+
+        class _Gate:
+            async def __aenter__(self_inner):
+                await cls._mutation_lock.acquire()
+                order = cls._next_operation_order
+                cls._next_operation_order += 1
+                return order
+
+            async def __aexit__(self_inner, *_):
+                cls._mutation_lock.release()
+
+        return _Gate()
 
     @staticmethod
     def _require_privileged(principal: Principal | None) -> None:

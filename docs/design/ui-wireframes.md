@@ -72,7 +72,7 @@ Announcements are newest first. Cached announcements are identified when require
 * Transport Management only
 ```
 
-Schedule rows contain weekday 1–7, Route, all buses assigned to that Route, and departure time; there is no per-schedule bus selector. Route direction is a `RETURN`/`PICK-UP` select. The change-set launcher includes adjacent **Create draft** and **Search drafts** actions. Publish shows a confirmation summary and requires an explicit “Publish anyway” when validation finds incomplete/conflicting entries. A stale draft shows the current baseline and rebase action; it cannot publish first.
+Schedule rows contain weekday 1–7, Route, all buses assigned to that Route, and departure time; there is no per-schedule bus selector. Route direction is a `RETURN`/`PICK-UP` select. The launcher contains one styled **Open Draft** action for the permanent shared draft. The desktop grid places Audit History beside the Working Copy (or Draft Editor once open), with Protected Publication below across both columns; its grid gap remains constant while history is expanded or collapsed. Publish is greyed out until the displayed snapshot has no unsaved changes; Publish warns only when a route has no recurring schedule entry and requires explicit “Publish anyway” in that case. The editor does not display a draft version; save/publish completion and errors remain visible within the editor.
 
 ## Admin — announcement / urgent lifecycle
 

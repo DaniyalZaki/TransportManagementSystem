@@ -30,6 +30,9 @@ class ChangeSetRepository(Protocol):
     async def search_drafts(self, query: str) -> list[TransportChangeSet]:
         ...
 
+    async def working_draft(self) -> TransportChangeSet | None:
+        ...
+
     async def snapshot(self, change_set_id: UUID) -> DraftTransportSnapshot:
         ...
 
@@ -39,9 +42,9 @@ class ChangeSetRepository(Protocol):
         ...
 
     async def publish(
-        self, change_set_id: UUID, expected_base_id: UUID | None,
-        publisher: str, published_at: datetime, audit: "PublicationAudit",
-    ) -> TransportChangeSet:
+        self, change_set_id: UUID, publisher: str, published_at: datetime,
+        audit: "PublicationAudit",
+    ) -> tuple[TransportChangeSet, UUID]:
         ...
 
     async def replace_snapshot(

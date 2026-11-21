@@ -11,6 +11,12 @@ describe("published transport information", () => {
           scheduled_departure_at: "2026-11-18T14:00:00+05:00",
         },
         {
+          route_id: "R-01",
+          bus_identifier: "C-13",
+          status: "scheduled",
+          scheduled_departure_at: "2026-11-18T14:00:00+05:00",
+        },
+        {
           route_id: "R-02",
           bus_identifier: "C-08",
           status: "no_further_departures_today",
@@ -41,6 +47,7 @@ describe("published transport information", () => {
     cy.contains("R-01").should("be.visible");
     cy.contains("C-12").should("be.visible");
     cy.contains("C-13").should("be.visible");
+    cy.get(".departure-list > li").first().should("contain.text", "C-12").and("contain.text", "C-13");
     cy.contains("No further departures today").should("be.visible");
     cy.findByRole("heading", { name: /today's schedule/i }).should("be.visible");
     cy.contains("Lahore → Campus").should("be.visible");

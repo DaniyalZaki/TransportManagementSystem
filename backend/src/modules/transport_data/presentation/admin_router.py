@@ -26,12 +26,7 @@ from src.modules.transport_data.infrastructure.change_set_repository import (
 router = APIRouter(prefix="/api/v1/admin/transport", tags=["transport administration"])
 
 
-class CreateChangeSetRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=160)
-
-
 class PublishChangeSetRequest(BaseModel):
-    expected_base_published_change_set_id: UUID | None = None
     publish_anyway: bool = False
 
 
@@ -103,7 +98,7 @@ def _response(change_set) -> dict[str, object]:
             str(change_set.base_published_change_set_id)
             if change_set.base_published_change_set_id else None
         ),
-        "expires_at": change_set.expires_at.isoformat(),
+        "operation_order": change_set.operation_order,
     }
 
 
@@ -168,90 +163,65 @@ def _snapshot(payload: UpdateChangeSetRequest) -> DraftTransportSnapshot:
     )
 
 
-@router.post("/change-sets", status_code=status.HTTP_201_CREATED)
-async def create_change_set(
-    payload: CreateChangeSetRequest, request: Request,
+@router.get("/draft")
+async def open_draft(
+    request: Request,
     principal: Annotated[Principal, Depends(_principal)],
 ) -> dict[str, object]:
     try:
-        return _response(await _service(request).create_draft(payload.name, principal))
-    except (ValueError, PermissionError) as error:
+        service = _service(request)
+        draft = await service.open_draft(principal)
+        _, snapshot = await service.get_draft(draft.id, principal)
+        return {**_response(draft), "snapshot": _snapshot_response(snapshot)}
+    except (ValueError, PermissionError, ChangeSetConflict) as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
         ) from error
 
 
-@router.get("/change-sets")
-async def search_change_sets(
-    request: Request, principal: Annotated[Principal, Depends(_principal)], query: str = "",
-) -> dict[str, object]:
-    try:
-        return {"change_sets": [
-            _response(change_set)
-            for change_set in await _service(request).search_drafts(query, principal)
-        ]}
-    except PermissionError as error:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
-
-
-@router.get("/change-sets/{change_set_id}")
-async def get_change_set(
-    change_set_id: UUID, request: Request,
-    principal: Annotated[Principal, Depends(_principal)],
-) -> dict[str, object]:
-    try:
-        change_set, snapshot = await _service(request).get_draft(change_set_id, principal)
-        return {**_response(change_set), "snapshot": _snapshot_response(snapshot)}
-    except ChangeSetConflict as error:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
-    except PermissionError as error:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
-
-
-@router.patch("/change-sets/{change_set_id}")
+@router.patch("/draft")
 async def update_change_set(
-    change_set_id: UUID, payload: UpdateChangeSetRequest, request: Request,
+    payload: UpdateChangeSetRequest, request: Request,
     principal: Annotated[Principal, Depends(_principal)],
 ) -> dict[str, object]:
     try:
-        updated = await _service(request).replace_snapshot(
-            change_set_id, payload.expected_version, _snapshot(payload), principal
+        service = _service(request)
+        draft = await service.open_draft(principal)
+        updated = await service.replace_snapshot(
+            draft.id, payload.expected_version, _snapshot(payload), principal
         )
-        return _response(updated)
+        return _response(updated.draft)
     except ChangeSetConflict as error:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "stale_change_set",
+                "message": str(error),
+                "operation_order": error.operation_order,
+            },
+        ) from error
     except (ValueError, PermissionError) as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
         ) from error
 
 
-@router.post("/change-sets/{change_set_id}/validate")
-async def validate_change_set(
-    change_set_id: UUID, request: Request,
-    principal: Annotated[Principal, Depends(_principal)],
-) -> dict[str, object]:
-    try:
-        _service(request)._require_privileged(principal)
-        warnings = await _service(request).validate(change_set_id)
-        return {"warnings": [{"code": item.code, "message": item.message} for item in warnings]}
-    except (ValueError, PermissionError) as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
-        ) from error
-
-
-@router.post("/change-sets/{change_set_id}/publish")
+@router.post("/draft/publish")
 async def publish_change_set(
-    change_set_id: UUID, payload: PublishChangeSetRequest, request: Request,
+    payload: PublishChangeSetRequest, request: Request,
     principal: Annotated[Principal, Depends(_principal)],
 ) -> dict[str, object]:
     try:
-        published = await _service(request).publish(
-            change_set_id, payload.expected_base_published_change_set_id,
-            payload.publish_anyway, principal.subject, principal,
+        service = _service(request)
+        draft = await service.open_draft(principal)
+        published = await service.publish(
+            draft.id, payload.publish_anyway, principal.subject, principal,
         )
-        return _response(published)
+        return {
+            **_response(published.draft),
+            "published_change_set_id": str(published.published_change_set_id),
+            "published_at": published.published_at.isoformat(),
+        }
     except PublishConfirmationRequired as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -260,20 +230,14 @@ async def publish_change_set(
             ]},
         ) from error
     except ChangeSetConflict as error:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
-    except PermissionError as error:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
-
-
-@router.post("/change-sets/{change_set_id}/rebase")
-async def rebase_change_set(
-    change_set_id: UUID, request: Request,
-    principal: Annotated[Principal, Depends(_principal)],
-) -> dict[str, object]:
-    try:
-        return _response(await _service(request).rebase(change_set_id, principal))
-    except ChangeSetConflict as error:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "stale_change_set",
+                "message": str(error),
+                "operation_order": error.operation_order,
+            },
+        ) from error
     except PermissionError as error:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
 

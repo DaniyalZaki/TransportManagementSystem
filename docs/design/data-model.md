@@ -9,7 +9,7 @@ This proposed PostgreSQL model preserves approved modular-monolith ownership bou
 | Module | Tables owned | Lifecycle |
 |---|---|---|
 | Authentication | `authentication_role_mappings` | One mapped role per Supabase user; deactivation blocks new login. |
-| Transport Data | `transport_change_sets`, versioned `routes`, `buses`, `assignments`, `weekly_departures`, `date_overrides`, `published_change_sets` | Drafts expire at 30 days; retired published records delete at 30 days. |
+| Transport Data | `transport_change_sets`, versioned `routes`, `buses`, `assignments`, `weekly_departures`, `date_overrides`, `published_change_sets` | One permanent working draft; retired published records delete at 30 days. |
 | Audit | `transport_publications`, `recovery_requests` | Publication actor/time only; 30 days. |
 | Announcement | `announcements`, `urgent_banners` | Removed/expired announcements retained 30 days; banner lifecycle independent. |
 | Feedback | `feedback_submissions`, `feedback_delivery_attempts` | Normalized duplicate check, delivery retry state, 30 days. |
@@ -32,7 +32,7 @@ erDiagram
 
 `authentication_role_mappings`: `supabase_user_id uuid primary key`, `role` constrained to `transport_management`/`designated_administrator`, `is_active`, `created_at`, `deactivated_at`. Supabase owns credentials and sessions, so neither passwords nor tokens belong here.
 
-`transport_change_sets`: `id`, unique `name`, `status` (`draft`, `published`, `retired`, `expired`), `base_published_change_set_id`, `created_by`, `created_at`, `updated_at`, `expires_at`, `published_at`. The base pointer enables stale detection/rebase. Every versioned transport record has `id`, `change_set_id`, `version`, `status`, `created_at`, `retired_at`; public queries join only the current `published_change_sets` record and `status = 'published'`.
+`transport_change_sets`: `id`, unique `name`, `status` (`draft`, `published`, `retired`, `expired`), `base_published_change_set_id`, `created_at`, `updated_at`, and `expires_at`. Exactly one row has `status = 'draft'`; it is the permanent working draft and its expiry is never processed. Publishing copies its snapshot into a new published row and advances its base pointer. Every versioned transport record has `id`, `change_set_id`, `version`, `status`, `created_at`, `retired_at`; public queries join only the current `published_change_sets` record and `status = 'published'`.
 
 | Table | Domain columns | Key constraint |
 |---|---|---|
