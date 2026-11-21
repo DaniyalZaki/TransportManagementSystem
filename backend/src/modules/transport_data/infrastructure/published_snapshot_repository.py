@@ -49,7 +49,7 @@ class PostgresPublishedSnapshotRepository:
             )
             departures = await connection.fetch(
                 """
-                SELECT weekday, local_departure_time, route_code, bus_identifier
+                SELECT DISTINCT weekday, local_departure_time, route_code
                 FROM transport_weekly_departures
                 WHERE change_set_id = $1 AND status = 'published'
                 """,
@@ -79,7 +79,6 @@ class PostgresPublishedSnapshotRepository:
                     weekday=row["weekday"],
                     departure_time=row["local_departure_time"],
                     route_code=row["route_code"],
-                    bus_identifier=row["bus_identifier"],
                 )
                 for row in departures
             ),

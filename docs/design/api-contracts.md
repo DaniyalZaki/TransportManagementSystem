@@ -29,7 +29,7 @@ This proposed REST contract is derived from `PRD.md`, `architecture.md`, `plan.m
 }
 ```
 
-`ScheduleResponse` includes `service_date`, `service_status` (`operating` or `no_service`), `entries`, and `published_at`. Each entry contains a route ID, separately maintained origin/destination/direction, bus identifier, and PKT scheduled departure.
+`ScheduleResponse` includes `service_date`, `service_status` (`operating` or `no_service`), `entries`, and `published_at`. Each entry contains a route ID, separately maintained origin/destination and `RETURN`/`PICK-UP` direction, every assigned bus identifier in `bus_identifiers`, and a PKT scheduled departure. Draft `weekly_departures` use weekday 1–7, Route, and departure time only; the backend derives buses from assignments.
 
 ```json
 // POST /public/feedback
@@ -44,26 +44,24 @@ Both privileged roles may manage transport data; only `transport_management` may
 
 | Method and path | Purpose | Rules |
 |---|---|---|
-| `POST /admin/transport/change-sets` | Create named draft. | Starts at current published baseline. |
-| `GET/PATCH /admin/transport/change-sets/{id}` | Read/save draft routes, buses, assignments, schedules, overrides. | Carries `base_published_change_set_id`; never public. |
-| `POST /admin/transport/change-sets/{id}/validate` | Calculate incomplete/conflict warnings. | Warnings do not block publication. |
-| `POST /admin/transport/change-sets/{id}/rebase` | Rebase stale draft. | Required before stale publish. |
-| `POST /admin/transport/change-sets/{id}/publish` | Atomically publish. | Explicit `publish_anyway` needed with warnings; one audit record + synchronous cache invalidation. |
+| `GET /admin/transport/draft` | Open the permanent shared draft. | Creates it from the published baseline only if it does not yet exist. |
+| `PATCH /admin/transport/draft` | Save routes, buses, assignments, schedules, and overrides. | Complete snapshot with `expected_version`; serial execution returns `operation_order`. |
+| `POST /admin/transport/draft/publish` | Atomically snapshot and publish the shared draft. | The draft remains editable; it may publish against the current pointer without a rebase. Explicit `publish_anyway` is needed only when a route has no recurring schedule entry. Returns `operation_order`. |
 | `GET /admin/transport/publications` | List recent publications. | Publisher/time only; 30-day window. |
 | `POST /admin/transport/publications/{id}/recover` | Recover eligible published set. | Whole change set only; never draft/announcement. |
 
-Publish request: `{"expected_base_published_change_set_id":"cs_01","publish_anyway":false}`. A changed base returns `409 stale_change_set`; success returns the new published change-set ID and publication time.
+Publish request: `{"publish_anyway":false}`. Publishing always snapshots the current permanent draft; a stale save still returns `409 stale_change_set`, so the user reloads before saving again. Success returns the new published change-set ID and publication time.
 
 ### Slice 2 delivery
 
-Slice 2 exposes authenticated draft create/read/update, validation, rebase,
-publication history, direct whole-change-set recovery, and publication
-endpoints. A draft update contains the complete snapshot and its
-`expected_version`; a stale write returns `409`. Publication and recovery write
-the current pointer and Audit publication record in one PostgreSQL transaction,
-then invalidate the single-worker read cache synchronously. The hourly
-single-worker lifecycle job expires drafts and physically deletes retired
-published snapshots after their respective 30-day periods.
+Slice 2 exposes authenticated shared-draft open/update, publication history,
+direct whole-change-set recovery, and publication endpoints. A draft update
+contains the complete snapshot and its `expected_version`; a stale write
+returns `409`. Save and publish serialize in the one worker and return a
+temporary numeric `operation_order`. Publication snapshots the permanent draft,
+writes the current pointer and Audit record in one PostgreSQL transaction, then
+invalidates the read cache synchronously. Retired published snapshots are
+physically deleted after 30 days; the working draft is never expired or deleted.
 
 ## Announcements, banners, and accounts
 

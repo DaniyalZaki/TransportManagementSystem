@@ -7,7 +7,7 @@ The system is a modular monolith: two Next.js clients call one FastAPI backend, 
 ## Key features
 
 - Login-free current-departure and daily-schedule views calculated in Pakistan Standard Time (PKT).
-- Published-only transport data: route, bus/service, assignment, and schedule changes are drafts until an authorized user atomically publishes a named change set.
+- Published-only transport data: route, bus/service, assignment, and schedule changes live in one permanent shared draft until an authorized user atomically publishes a snapshot.
 - Recurring weekly schedules with full-day and partial date-specific overrides.
 - Directly published announcements, PKT expiry, and separate persistent urgent banners with distinct remove and resolve actions.
 - Anonymous feedback with a honeypot, normalized-content duplicate rejection for 10 minutes, SMTP delivery/retries, and 30-day retention.

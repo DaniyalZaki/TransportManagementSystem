@@ -17,7 +17,7 @@ class PublishedSnapshotRepository:
             routes=(Route("R-01", "Lahore", "Campus", "Inbound"),),
             assignments=(Assignment("R-01", "C-12"),),
             weekly_departures=(
-                WeeklyDeparture(2, time(14), "R-01", "C-12"),
+                WeeklyDeparture(3, time(14), "R-01"),
             ),
             overrides=(),
         )
@@ -56,4 +56,4 @@ def test_public_schedule_and_current_departures_use_only_the_injected_published_
     ]
     assert schedule_response["service_status"] == "operating"
     assert schedule_response["entries"][0]["origin"] == "Lahore"
-    assert schedule_response["entries"][0]["bus_identifier"] == "C-12"
+    assert schedule_response["entries"][0]["bus_identifiers"] == ["C-12"]

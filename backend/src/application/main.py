@@ -24,7 +24,6 @@ async def _lifespan(_: FastAPI):
         while True:
             try:
                 now = datetime.now(UTC)
-                await repository.expire_drafts(now)
                 await audit.delete_expired(now)
                 await repository.delete_retired(now)
             except Exception:

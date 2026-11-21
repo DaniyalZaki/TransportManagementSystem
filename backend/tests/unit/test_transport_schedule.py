@@ -24,8 +24,8 @@ def snapshot(*, overrides: tuple[DepartureOverride, ...] = ()) -> PublishedTrans
         routes=(ROUTE,),
         assignments=(ASSIGNMENT,),
         weekly_departures=(
-            WeeklyDeparture(2, time(8), "R-01", "C-12"),
-            WeeklyDeparture(2, time(14), "R-01", "C-12"),
+            WeeklyDeparture(3, time(8), "R-01"),
+            WeeklyDeparture(3, time(14), "R-01"),
         ),
         overrides=overrides,
     )
@@ -43,6 +43,21 @@ def test_daily_schedule_uses_weekly_departures_for_service_weekday() -> None:
         "2026-11-18T14:00:00+05:00",
     ]
     assert entries[0].route == ROUTE
+    assert entries[0].bus_identifiers == ("C-12",)
+
+
+def test_route_schedule_expands_to_every_assigned_bus() -> None:
+    many_buses = PublishedTransportSnapshot(
+        published_at=datetime(2026, 11, 20, 8, tzinfo=UTC),
+        routes=(ROUTE,),
+        assignments=(ASSIGNMENT, Assignment("R-01", "C-13")),
+        weekly_departures=(WeeklyDeparture(3, time(8), "R-01"),),
+        overrides=(),
+    )
+
+    assert daily_schedule(many_buses, date(2026, 11, 18))[0].bus_identifiers == (
+        "C-12", "C-13"
+    )
 
 
 def test_full_day_no_service_override_suppresses_weekly_schedule() -> None:

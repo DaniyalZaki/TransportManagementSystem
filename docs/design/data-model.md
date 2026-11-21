@@ -9,7 +9,7 @@ This proposed PostgreSQL model preserves approved modular-monolith ownership bou
 | Module | Tables owned | Lifecycle |
 |---|---|---|
 | Authentication | `authentication_role_mappings` | One mapped role per Supabase user; deactivation blocks new login. |
-| Transport Data | `transport_change_sets`, versioned `routes`, `buses`, `assignments`, `weekly_departures`, `date_overrides`, `published_change_sets` | Drafts expire at 30 days; retired published records delete at 30 days. |
+| Transport Data | `transport_change_sets`, versioned `routes`, `buses`, `assignments`, `weekly_departures`, `date_overrides`, `published_change_sets` | One permanent working draft; retired published records delete at 30 days. |
 | Audit | `transport_publications`, `recovery_requests` | Publication actor/time only; 30 days. |
 | Announcement | `announcements`, `urgent_banners` | Removed/expired announcements retained 30 days; banner lifecycle independent. |
 | Feedback | `feedback_submissions`, `feedback_delivery_attempts` | Normalized duplicate check, delivery retry state, 30 days. |
@@ -32,18 +32,18 @@ erDiagram
 
 `authentication_role_mappings`: `supabase_user_id uuid primary key`, `role` constrained to `transport_management`/`designated_administrator`, `is_active`, `created_at`, `deactivated_at`. Supabase owns credentials and sessions, so neither passwords nor tokens belong here.
 
-`transport_change_sets`: `id`, unique `name`, `status` (`draft`, `published`, `retired`, `expired`), `base_published_change_set_id`, `created_by`, `created_at`, `updated_at`, `expires_at`, `published_at`. The base pointer enables stale detection/rebase. Every versioned transport record has `id`, `change_set_id`, `version`, `status`, `created_at`, `retired_at`; public queries join only the current `published_change_sets` record and `status = 'published'`.
+`transport_change_sets`: `id`, unique `name`, `status` (`draft`, `published`, `retired`, `expired`), `base_published_change_set_id`, `created_at`, `updated_at`, and `expires_at`. Exactly one row has `status = 'draft'`; it is the permanent working draft and its expiry is never processed. Publishing copies its snapshot into a new published row and advances its base pointer. Every versioned transport record has `id`, `change_set_id`, `version`, `status`, `created_at`, `retired_at`; public queries join only the current `published_change_sets` record and `status = 'published'`.
 
 | Table | Domain columns | Key constraint |
 |---|---|---|
-| `routes` | `route_code`, `origin`, `destination`, `direction` | unique `(change_set_id, route_code)` |
+| `routes` | `route_code`, `origin`, `destination`, `direction` (`RETURN` or `PICK-UP`) | unique `(change_set_id, route_code)` |
 | `buses` | `bus_identifier` | unique `(change_set_id, bus_identifier)` |
 | `assignments` | `route_id`, `bus_id` | assignment belongs to one change set |
-| `weekly_departures` | `weekday` (0–6), `local_departure_time`, `route_id`, `bus_id` | unique change set/weekday/route/bus/time |
+| `weekly_departures` | ISO `weekday` (1–7), `local_departure_time`, `route_id` | one row per change set/weekday/route/time; it expands to all Route-to-bus assignments |
 | `date_overrides` | `service_date`, `scope` (`full_day`, `partial`), `no_service`, route/bus/time references | partial match is Route + Bus + time; time changes are remove/add |
 | `published_change_sets` | `change_set_id`, `published_at`, `is_current` | exactly one current pointer |
 
-An incomplete entry is saveable but warned at publish: it lacks date, time, route, bus, or assignment. Different assignments for the same departure instance are also warnings. Later published sets take precedence.
+An incomplete entry is saveable but warned at publish when it lacks weekday, time, Route, or an assignment for that Route. Schedule rows do not carry a bus reference: each one applies to all buses assigned to its Route. Later published sets take precedence.
 
 `transport_publications`: `id`, `published_change_set_id`, `publisher_supabase_user_id`, `published_at`, `expires_at`. It deliberately excludes edits, login/logout, announcements, and announcement version history. Recovery creates a new change set from an eligible whole published snapshot.
 
@@ -56,5 +56,5 @@ An incomplete entry is saveable but warned at publish: it lacks date, time, rout
 1. Publication checks/locks its base, writes new published versions and pointer, retires the prior pointer, writes exactly one publication record, and invalidates cache synchronously before success returns.
 2. Public reads select only active published records; drafts cannot appear.
 3. Recovery uses only a nonexpired whole published snapshot and normal publish rules; drafts and announcements are never recovered.
-4. PKT date conversion precedes weekly/override resolution. Full-day no-service wins; partial overrides match Route, Bus, time.
+4. PKT date conversion precedes weekly/override resolution. Weekly rows use weekday 1–7 and expand to Route assignments. Full-day no-service wins; partial overrides match Route, Bus, time.
 5. Retention jobs delete only records at their approved 30-day boundaries.

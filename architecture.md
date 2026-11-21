@@ -12,7 +12,7 @@ Students and the public view current departure status, bus/route schedules, and 
 |---|---|---|---|
 | ASR-01 | Published information must be visible/retrievable within 5 seconds (95th percentile) at a baseline of 500 concurrent users / 2,000 scheduled departures. | NFR-01 | Performance and capacity |
 | ASR-02 | Confirmed urgent operational changes must be live no later than 1 minute after confirmation. | FR-07, BR-04, BR-16 | Propagation latency |
-| ASR-03 | Route, schedule, and assignment edits are saved as drafts and require a separate publish action; students must never see unpublished drafts. | FR-06, FR-14a, BR-24 | Consistency and data model |
+| ASR-03 | Route, schedule, and assignment edits are saved in one permanent shared draft and require a separate publish action; students must never see unpublished data. | FR-06, FR-14a, BR-24 | Consistency and data model |
 | ASR-04 | The client must distinguish and handle three states (stale , offline, and service/data outage) with a 24-hour local cache retention and ~1-minute background sync. | FR-10 to FR-13, NFR-03, BR-10 to BR-12 | Availability and client architecture |
 | ASR-05 | Recovery objectives: RTO <= 4 hours, RPO <= 1 hour, verified by recovery testing. | NFR-04 | Reliability and recovery |
 | ASR-06 | Successful transport publications must be retained for 30 days with publisher and publication-time attribution. Recovery is limited to previously published transport data (not drafts). | FR-14b, BR-13 | Traceability and data model |
@@ -72,7 +72,7 @@ The diagram only shows logical relationships. Direct database access is allowed 
 
 | Module | Owns | Must not own |
 |---|---|---|
-| Transport Data | Routes, bus/service identifiers, assignments, schedules, draft and published versions, "current departure" computation | Announcement content; notification/delivery logic |
+| Transport Data | Routes with `RETURN`/`PICK-UP` direction, bus/service identifiers, Route-to-bus assignments, weekday-1–7 route-level schedules, draft and published versions, "current departure" computation | Announcement content; notification/delivery logic |
 | Announcement | Announcement and urgent-notice content, direct-publish workflow (no draft step) | Transport schedule data; conflict logic for departures |
 | Feedback | Feedback submissions, honeypot validation, normalized duplicate-window detection, SMTP retry, and 30-day retention | IP-based limiting or a status-tracking dashboard |
 | Audit | Append-only transport-publication records (publisher and time), 30-day retention, and whole-change-set recovery of previously published data | Edit, announcement-version, and login/logout history; deciding what is published; owning draft content itself |
@@ -85,9 +85,9 @@ The Transport Data and Announcement modules remain the sole authorities for what
 
 | Contract | Input | Outcome / rule |
 |---|---|---|
-| PublishTransportData | authenticated privileged user, named change-set ID | Promotes the change set to published versions, writes the publication record, and invalidates relevant cache entries synchronously (supports ASR-01) |
+| PublishTransportData | authenticated privileged user, shared draft baseline | Snapshots the shared draft into a new published version, writes the publication record, and invalidates relevant cache entries synchronously. Save/publish operations pass through the single-worker FIFO gate and receive a temporary numeric execution-order ID. |
 | PublishAnnouncement | authenticated privileged user, announcement content, urgency flag | Publishes directly (no draft step) and invalidates cache synchronously. Must complete within the 1-minute bound for urgent items (ASR-02) |
-| GetCurrentDeparture / GetSchedule | route or bus ID, date | Returns only published data; no authentication required (ASR-07) |
+| GetCurrentDeparture / GetSchedule | route or bus ID, date | Returns only published data; no authentication required. A weekly schedule row uses weekday 1–7, Route, and time, then expands to every bus assigned to that Route (ASR-07). |
 | SubmitFeedback | content, honeypot field | Rejects if honeypot is populated or a content-identical submission exists within the last 10 minutes (ASR-09). No IP-based checks |
 | GetPublicationHistory / RecoverPublishedChangeSet | change-set ID, date range | Returns transport-publication history for 30 days; recovery targets a whole previously published change set, never a draft (ASR-06) |
 
@@ -108,7 +108,7 @@ The Transport Data and Announcement modules remain the sole authorities for what
 - **Technology stack:** Python/FastAPI backend; handwritten asynchronous PostgreSQL SQL and migrations; PostgreSQL; separate Next.js Public PWA and Admin Web App; Tailwind CSS with accessible headless components; Workbox; Pytest plus Cypress.
 - **Read cache:** A single FastAPI process/worker uses an in-process cache. Any move to multiple workers requires a shared-cache decision.
 - **Identity:** Self-hosted Supabase Auth shares the PostgreSQL deployment. Privileged users sign in with email/password; Supabase defaults apply, MFA is not required, and roles are held in a backend-owned PostgreSQL mapping. Only Transport Management manages accounts. The first Transport Management account is manually created through Supabase administration; account deactivation blocks new login but active sessions run to token expiry. Temporary passwords are voluntarily changed.
-- **Data lifecycle:** Transport drafts expire after 30 days. Named change sets publish atomically; stale change sets must rebase. Full-day and partial date overrides are supported; partial changes match Route, Bus, and time, and a time change is a remove/add operation. Published data is recoverable as whole change sets for 30 days. Retired records are physically deleted 30 days after retirement.
+- **Data lifecycle:** One permanent shared draft is saved by all authorized users and is never expired or deleted by retention work. Publishing snapshots its current content atomically into a new published version; a warning and explicit confirmation is required only when one or more routes have no recurring schedule entry. A single worker serializes save/publish requests and assigns a temporary numeric execution-order ID. A recurring weekly schedule uses ISO weekday 1–7, Route, and PKT departure time; the Transport Data module expands it to every current Route-to-bus assignment. Published data is recoverable as whole change sets for 30 days. Retired published records are physically deleted 30 days after retirement.
 - **Feedback:** Send to a configured Transport Management mailbox using backend SMTP. Normalize case, leading/trailing whitespace, and repeated internal whitespace for duplicate detection. Retry failed mail after 1, 5, and 30 minutes; retain feedback for 30 days. Immediate SMTP failure displays an error; later successful retry is not reported. A resubmission while retry is pending receives a neutral “already received” message.
 - **Hosting/infrastructure provider:** Deliberately deferred. Local development services are approved; a production deployment and RTO/RPO verification remain release prerequisites.
 

@@ -63,7 +63,7 @@ Modules expose application services/DTOs rather than querying another module’s
 **Publish transport:** validate JWT/role; verify draft expiry/base and warnings; atomically promote snapshot/current pointer, retire the old pointer, write one publication record, and invalidate cache before success returns.
 
 **Slice 2 delivery:** The Transport Data change-set application service owns
-draft creation/read/update, validation, stale-baseline rejection/rebase,
+shared-draft open/update, schedule-warning validation, stale-save rejection,
 explicit warning confirmation, recovery invocation, and published-cache
 invalidation. The PostgreSQL adapter updates a draft snapshot only at its
 expected version, moves the published pointer, retires its predecessor, and

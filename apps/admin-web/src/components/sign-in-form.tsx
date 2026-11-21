@@ -5,7 +5,7 @@ import { FormEvent, useState } from "react";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_UTS_API_BASE_URL ?? "http://localhost:8000";
 
-export function SignInForm() {
+export function SignInForm({ onSignedIn }: { onSignedIn: () => void }) {
   const [message, setMessage] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -26,7 +26,7 @@ export function SignInForm() {
       return;
     }
     sessionStorage.setItem("uts.access-token", payload.access_token);
-    setMessage("Signed in. Transport management features will be available here.");
+    onSignedIn();
     setIsSubmitting(false);
   }
 
@@ -44,9 +44,10 @@ export function SignInForm() {
           type="email"
         />
       </Field>
+
       <Field>
         <Label className="block font-semibold" htmlFor="password">
-          Password
+          Password {"  "}
         </Label>
         <Input
           className="mt-1 block w-full rounded border border-slate-400 bg-white px-3 py-2"

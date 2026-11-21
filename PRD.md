@@ -12,8 +12,9 @@ and in older ADRs. ADR-011 records their architectural rationale.
   Cache Storage, and IndexedDB; refresh runs every minute while the app
   is open, on reconnection, and on manual refresh.
 - PostgreSQL is the system of record. A single FastAPI worker uses an
-  in-process read cache. Named transport change sets publish atomically;
-  stale change sets must rebase before publication.
+  in-process read cache. One permanent shared transport draft publishes
+  atomically as a new published snapshot. Save and publish requests execute
+  serially and report a temporary numeric execution-order identifier.
 - Supabase Auth is self-hosted on the PostgreSQL deployment. Privileged
   users use email/password. Roles are mapped in backend-owned PostgreSQL
   data; only Transport Management manages accounts. Deactivation blocks
@@ -79,13 +80,13 @@ The user wants to stay up to date with daily coaster timings, routes and announc
 | Term | Definition |
 |---|---|
 | Schedule / Timetable / Departure Schedule | Equivalent terms for departure-time information. The "current departure-time table" and "that specific day's departure times" are the two schedule views from D-18. |
-| Recurring weekly schedule | A schedule pattern assigned to days of the week and used when no date-specific override applies. |
+| Recurring weekly schedule | A schedule pattern identified by weekday **1–7** (Monday through Sunday), Route, and departure time. Each entry applies to every Bus/Service Identifier currently assigned to that Route. |
 | Date-specific override | A schedule change applying to one specified service date; it takes precedence over the recurring weekly schedule for that date. It may specify a no-service day. |
-| Draft transport data | Saved Route, Bus/Service Identifier, assignment, or Schedule / Timetable changes that are not yet visible to students because they have not been separately published. |
+| Draft transport data | The one saved shared Route, Bus/Service Identifier, assignment, and Schedule / Timetable workspace; it is not visible to students until separately published and never expires. |
 | Announcement expiry | The optional date/time selected by an authorized publisher for an announcement to stop being displayed. An announcement may instead remain visible until manually removed. |
 | Announcement version history | The retained prior versions of an announcement when its published content is edited. |
 | Service date | The calendar date, in Pakistan Standard Time (PKT), on which a scheduled departure is assigned to operate. |
-| Departure instance | One scheduled service uniquely identified by service date, scheduled departure date/time, Route, and Bus/Service Identifier. |
+| Departure instance | One scheduled service derived from a schedule row and a Bus/Service Identifier assigned to its Route, uniquely identified by service date, scheduled departure date/time, Route, and Bus/Service Identifier. |
 | Current departure | For each Route and Bus/Service Identifier, the earliest departure instance scheduled for the current service date whose scheduled departure time is at or after the current PKT time. It is a next-upcoming departure, not a GPS/live-location status. |
 | Last successful synchronization | The time at which the application most recently completed a successful retrieval of the relevant published transport data from the service. Cached display or page reload does not change this time. |
 | Cached information | Previously retrieved transport information retained on the user's device for offline or outage viewing. |
@@ -93,8 +94,8 @@ The user wants to stay up to date with daily coaster timings, routes and announc
 | Stale information | Information whose last successful synchronization is more than 5 minutes old. |
 | Route | A unique route identifier. Route locations and direction are maintained separately rather than being embedded in the Route identifier. |
 | Bus/Service Identifier | Identifies an individual physical coaster. |
-| Coaster-to-route assignment | Associates an individual physical coaster with a Route for a particular departure instance. |
-| Incomplete schedule entry | A departure entry missing any required field: service date, departure time, Route, Bus/Service Identifier, or coaster-to-route assignment. |
+| Coaster-to-route assignment | Associates an individual physical coaster with a Route. A schedule row automatically applies to all buses assigned to that Route; it does not select an individual bus. |
+| Incomplete schedule entry | A departure entry missing weekday, departure time, Route, or at least one coaster-to-route assignment for its Route. |
 | Conflicting assignment | Two different coaster-to-route assignments recorded for the same departure instance. |
 | Cache retention period | The period cached core transport information remains available for offline viewing after its last successful synchronization. |
 | Official transport information channel | The designated authoritative channel through which transport information is published to students and the public. |
@@ -134,10 +135,10 @@ The user wants to stay up to date with daily coaster timings, routes and announc
 
 - **FR-01:** The system shall display departure-time information to students and the public without requiring Login.
 - **FR-02:** The system shall display the next-upcoming departure instance for each Route and Bus/Service Identifier for the current service date. Each departure instance shall be identified by service date, scheduled departure date/time, Route, and Bus/Service Identifier. The system shall not imply that a departure is currently in motion or GPS-tracked. If no later departure exists for a Route and Bus/Service Identifier on that service date, the system shall display “No further departures today” for that service grouping.
-- **FR-03:** The system shall display the daily Schedule / Timetable, identifying each departure by its unique Route identifier and the Bus/Service Identifier of the physical coaster assigned to that particular departure. Route locations and direction shall be maintained separately from the Route identifier. The schedule shall be based on a recurring weekly schedule, with date-specific overrides taking precedence for the dates to which they apply. A date-specific override may specify that no service operates on that date.
+- **FR-03:** The system shall display the daily Schedule / Timetable with weekday values 1–7 (Monday–Sunday), a unique Route identifier, the complete set of Bus/Service Identifiers assigned to that Route, and a PKT departure time. A schedule row shall automatically apply to every bus assigned to its Route; operators shall not select a bus separately while defining the schedule. Route locations and direction shall be maintained separately from the Route identifier, and direction shall be one of `RETURN` or `PICK-UP`. The schedule shall be based on a recurring weekly schedule, with date-specific overrides taking precedence for the dates to which they apply. A date-specific override may specify that no service operates on that date.
 - **FR-04:** The system shall display announcements published by Transport Management and designated administrators to students and the public, including transport-related and non-transport-related notices. Announcements shall be ordered newest first. At publication, the authorized publisher shall choose either a PKT expiry date/time or that the announcement remains visible until manually removed. Published announcements may be edited; prior versions are not retained. Removed and expired records are retained for 30 days. For urgent announcements, the persistent banner follows FR-05 and FR-08 regardless of announcement expiry.
 - **FR-05:** The system shall allow Transport Management and designated administrators to identify an operational change as urgent and shall display each urgent change through a separate persistent alert banner and an announcement. Each banner shall remain visible until manually removed or resolved by an authorized user. Multiple urgent banners shall be displayed separately, newest first.
-- **FR-06:** The system shall allow Transport Management and designated administrators to update unique Route identifiers, separately maintained route locations and direction, physical Bus/Service Identifiers, departure-specific coaster-to-route assignments, and Schedule / Timetable information. Saving these changes shall create draft transport data; a separate Publish action shall be required before the changes become visible to students.
+- **FR-06:** The system shall allow Transport Management and designated administrators to open and save one shared permanent draft containing unique Route identifiers, separately maintained route locations and fixed `RETURN`/`PICK-UP` direction, physical Bus/Service Identifiers, Route-to-bus assignments, and Schedule / Timetable information. A schedule row contains weekday 1–7, Route, and departure time and uses all buses assigned to that Route. Saving preserves changes for every privileged account; a separate Publish action is required before the changes become visible to students.
 - **FR-07:** The system shall allow Transport Management and designated administrators to publish announcements, including operational changes and non-transport-related notices. An announcement is published through its Publish action without a separate draft-publication workflow. Either role may confirm an operational change before publication. A confirmed operational change shall be published immediately where possible and no later than 1 minute after confirmation.
 - **FR-08:** The system shall allow Transport Management and designated administrators to remove or resolve urgent announcements manually. Removal shall hide the banner from public display without marking the change as resolved. Resolution shall mark the urgent announcement as resolved and retain that resolution state. Neither action shall occur automatically.
 - **FR-09:** The system shall allow students and the public to submit Feedback through a simple form that sends submissions to the configured Transport Management mailbox using SMTP. Name and contact details shall be optional, and anonymous submissions shall be permitted. The system shall apply a hidden honeypot field and reject normalized-content duplicates received within the preceding 10 minutes. No IP-based submission limit shall be applied. On immediate SMTP failure it shall show an error, retain the submission, and retry after 1, 5, and 30 minutes without later user notification. Feedback is retained for 30 days; a dashboard and status tracking are out of scope.
@@ -166,7 +167,7 @@ The user wants to stay up to date with daily coaster timings, routes and announc
 - **BR-04:** A confirmed operational change shall be published as soon as it is confirmed, without intentional delay, and no later than 1 minute after confirmation.
 - **BR-05:** Urgent operational changes must be communicated through both a persistent alert banner and an announcement. Transport Management and designated administrators may identify an operational change as urgent.
 - **BR-06:** When published transport information conflicts, the latest published update takes effect, and the change is recorded.
-- **BR-07:** If a schedule is incomplete or contains conflicts, the system shall warn the publisher but allow publication to proceed. A schedule entry is incomplete if any of the following is missing: service date, departure time, Route, Bus/Service Identifier, or coaster-to-route assignment. A conflict exists when two different coaster-to-route assignments are recorded for the same departure instance. Students shall see only the latest published version and shall not see a separate conflict warning.
+- **BR-07:** Publishing shall warn the publisher only when one or more configured Routes have no recurring schedule entry. The warning shall not block publication after explicit confirmation. Students shall see only the latest published version and shall not see a separate warning.
 - **BR-08:** Transport Management and designated administrators authenticate using individual accounts and passwords.
 - **BR-09:** Current departure is evaluated separately for each Route and Bus/Service Identifier using PKT and the current service date. The selected departure is the earliest scheduled departure at or after the current time. Once all departures for that grouping have passed, the system displays “No further departures today”; it does not continue to label the final past departure as current.
 - **BR-10:** Freshness is based only on the last successful synchronization timestamp. Data is fresh at an age of 5 minutes or less and stale at an age greater than 5 minutes.
@@ -183,7 +184,7 @@ The user wants to stay up to date with daily coaster timings, routes and announc
 - **BR-21:** Transport Management and designated administrators may determine whether an operational change is urgent and may confirm an operational change before publication.
 - **BR-22:** Each urgent change shall have its own persistent banner. Banners remain visible until manually removed or resolved by Transport Management or a designated administrator and are ordered newest first. Removal hides the banner without recording the change as resolved; resolution records that the issue has been resolved.
 - **BR-23:** Each announcement shall be configured at publication either to expire at a selected PKT date/time or to remain visible until manually removed. Announcements are ordered newest first. Published announcements may be edited without retaining previous versions; removed/expired records are retained for 30 days. An urgent banner remains governed by BR-22 even if its associated announcement reaches display expiry.
-- **BR-24:** Changes to Routes, route locations/direction, Bus/Service Identifiers, assignments, and schedules are saved as drafts and require a separate Publish action before becoming visible. Announcements are published directly through their Publish action.
+- **BR-24:** Changes to Routes, route locations/direction, Bus/Service Identifiers, Route-to-bus assignments, and schedules are saved in one permanent shared draft and require a separate Publish action before becoming visible. Save Draft and Publish execute one request at a time and return a temporary numeric execution-order identifier. Schedule rows use weekday 1–7 and every bus assigned to the selected Route. Announcements are published directly through their Publish action.
 - **BR-25:** The portal is the official transport information channel and replaces the existing WhatsApp channel for official transport information. The portal is the authoritative source for published schedules, route assignments, and announcements.
 
 ### 9.2 Constraints
@@ -262,7 +263,7 @@ Trigger: Transport Management or a designated administrator needs to update tran
 Actors: Transport Management, designated administrators
 Normal sequence:
 1. The authorized user accesses the transport information management function.
-2. The user edits a Route, route locations/direction, Bus/Service Identifier, departure-specific assignment, or Schedule / Timetable.
+2. The user edits a Route (with `RETURN` or `PICK-UP` direction), route locations, Bus/Service Identifier, Route-to-bus assignment, or a weekday-1–7 Schedule / Timetable row.
 3. The system saves the successful edit as draft transport data; edits are not audit-recorded.
 4. The authorized user reviews the draft and selects Publish as a separate action.
 5. The system makes the published transport data visible to students and records publisher and publication time for 30 days.
@@ -388,7 +389,7 @@ EC-05 | FR-03, BR-07 | Situation: The Schedule / Timetable contains incomplete o
 
 EC-06 | FR-03 | Situation: A service date has a recurring weekly schedule and/or a date-specific override. | Status: COVERED | Behaviour: Use the recurring weekly schedule unless a date-specific override exists; the override takes precedence and may specify no service.
 
-EC-07 | FR-03 | Situation: A service must be identified in the Schedule / Timetable. | Status: COVERED | Behaviour: Show the unique Route identifier and the physical coaster assigned to that particular departure; maintain route locations and direction separately.
+EC-07 | FR-03 | Situation: A service must be identified in the Schedule / Timetable. | Status: COVERED | Behaviour: Show weekday 1–7, Route, every Bus/Service Identifier assigned to that Route, and departure time; maintain route locations and `RETURN`/`PICK-UP` direction separately.
 
 EC-08 | FR-04 | Situation: The system encounters announcements of different types. | Status: COVERED | Behaviour: Display all announcements published by Transport Management and designated administrators, including transport-related and non-transport-related notices.
 
@@ -618,7 +619,7 @@ EC-30 | FR-15, BR-25 | Situation: A user looks for official transport informatio
 - **OQ-12:** RESOLVED. A recovery test passes when recovery time is no more than 4 hours and data loss is no more than 1 hour. [Related: NFR-04]
 - **OQ-13:** RESOLVED. At least 95% of defined acceptance criteria must pass, with no critical defects. [Related: Section 12, NFR-03, NFR-04]
 - **OQ-14:** RESOLVED. Use a hidden honeypot field for basic spam prevention and reject submissions identical in content to a previous submission received within the preceding 10 minutes. Do not apply an IP-based submission limit. [Related: FR-09, BR-18]
-- **OQ-15:** RESOLVED. Route is a unique identifier; route locations and direction are maintained separately. Bus/Service Identifier identifies an individual physical coaster. A coaster-to-route assignment associates that physical coaster with a Route for a particular departure instance. [Related: FR-02, FR-03, FR-06]
+- **OQ-15:** RESOLVED. Route is a unique identifier; route locations and direction (`RETURN` or `PICK-UP`) are maintained separately. Bus/Service Identifier identifies an individual physical coaster. A Route-to-bus assignment associates that physical coaster with a Route, and each schedule row automatically applies to every assigned bus. [Related: FR-02, FR-03, FR-06]
 - **OQ-16:** RESOLVED. “Current departure” means the next-upcoming departure instance selected independently for each Route and Bus/Service Identifier for the current service date in PKT. It is identified by service date, scheduled departure date/time, Route, and Bus/Service Identifier. After the final departure for a grouping, show “No further departures today”. This is schedule-based, not GPS/live tracking. [Related: FR-02]
 - **OQ-17:** RESOLVED. The Schedule / Timetable uses a recurring weekly schedule as its base. A date-specific override takes precedence for the date it covers and may specify a no-service day. Future dates use the recurring weekly schedule unless an override exists. [Related: FR-03, BR-20]
 - **OQ-18:** RESOLVED. Both Transport Management and designated administrators may identify an operational change as urgent and confirm an operational change before publication. [Related: FR-05, FR-07, BR-05, BR-21]

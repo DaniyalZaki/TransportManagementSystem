@@ -39,6 +39,7 @@ class TransportChangeSet:
     created_at: datetime
     updated_at: datetime
     expires_at: datetime
+    operation_order: int | None = None
 
     def published(self, at: datetime) -> "TransportChangeSet":
         return TransportChangeSet(
