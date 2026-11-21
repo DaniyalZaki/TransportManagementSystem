@@ -36,7 +36,7 @@ class MemoryChangeSets:
                 routes=(Route("R-01", "Lahore", "Campus", "Inbound"),),
                 buses=("C-12",),
                 assignments=(Assignment("R-01", "C-12"),),
-                weekly_departures=(WeeklyDeparture(0, time(8), "R-01", "C-12"),),
+                weekly_departures=(WeeklyDeparture(1, time(8), "R-01"),),
                 overrides=(),
             )
         }
@@ -170,7 +170,7 @@ def test_publish_with_schedule_warnings_requires_explicit_confirmation() -> None
         routes=(Route("R-01", "Lahore", "Campus", "Inbound"),),
         buses=("C-12",),
         assignments=(),
-        weekly_departures=(WeeklyDeparture(0, time(8), "R-01", "C-12"),),
+        weekly_departures=(WeeklyDeparture(1, time(8), "R-01"),),
         overrides=(),
     )
 

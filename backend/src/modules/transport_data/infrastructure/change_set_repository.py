@@ -36,6 +36,16 @@ class PostgresChangeSetRepository:
             )
         return self._to_change_set(row) if row else None
 
+    async def search_drafts(self, query: str) -> list[TransportChangeSet]:
+        async with open_connection(self._database_url) as connection:
+            rows = await connection.fetch(
+                """SELECT * FROM transport_change_sets
+                WHERE status = 'draft' AND name ILIKE $1
+                ORDER BY updated_at DESC, name ASC LIMIT 20""",
+                f"%{query.strip()}%",
+            )
+        return [self._to_change_set(row) for row in rows]
+
     async def expire_drafts(self, now: datetime) -> int:
         """Lifecycle job entry point; expired drafts are never publishable."""
         async with open_connection(self._database_url) as connection:
@@ -74,13 +84,13 @@ class PostgresChangeSetRepository:
             routes = await connection.fetch("SELECT route_code, origin, destination, direction FROM transport_routes WHERE change_set_id = $1", change_set_id)
             buses = await connection.fetch("SELECT bus_identifier FROM transport_buses WHERE change_set_id = $1", change_set_id)
             assignments = await connection.fetch("SELECT route_code, bus_identifier FROM transport_assignments WHERE change_set_id = $1", change_set_id)
-            departures = await connection.fetch("SELECT weekday, local_departure_time, route_code, bus_identifier FROM transport_weekly_departures WHERE change_set_id = $1", change_set_id)
+            departures = await connection.fetch("SELECT DISTINCT weekday, local_departure_time, route_code FROM transport_weekly_departures WHERE change_set_id = $1", change_set_id)
             overrides = await connection.fetch("SELECT service_date, is_full_day_no_service, operation, route_code, bus_identifier, local_departure_time FROM transport_date_overrides WHERE change_set_id = $1", change_set_id)
         return DraftTransportSnapshot(
             routes=tuple(Route(row["route_code"], row["origin"], row["destination"], row["direction"]) for row in routes),
             buses=tuple(row["bus_identifier"] for row in buses),
             assignments=tuple(Assignment(row["route_code"], row["bus_identifier"]) for row in assignments),
-            weekly_departures=tuple(WeeklyDeparture(row["weekday"], row["local_departure_time"], row["route_code"], row["bus_identifier"]) for row in departures),
+            weekly_departures=tuple(WeeklyDeparture(row["weekday"], row["local_departure_time"], row["route_code"]) for row in departures),
             overrides=tuple(DepartureOverride(row["service_date"], row["is_full_day_no_service"], OverrideOperation(row["operation"]) if row["operation"] else None, row["route_code"], row["bus_identifier"], row["local_departure_time"]) for row in overrides),
         )
 
@@ -200,7 +210,7 @@ class PostgresChangeSetRepository:
         for assignment in snapshot.assignments:
             await connection.execute("INSERT INTO transport_assignments (id, change_set_id, route_code, bus_identifier, status, version) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)", change_set_id, assignment.route_code, assignment.bus_identifier, status, version)
         for departure in snapshot.weekly_departures:
-            await connection.execute("INSERT INTO transport_weekly_departures (id, change_set_id, weekday, local_departure_time, route_code, bus_identifier, status, version) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)", change_set_id, departure.weekday, departure.departure_time, departure.route_code, departure.bus_identifier, status, version)
+            await connection.execute("INSERT INTO transport_weekly_departures (id, change_set_id, weekday, local_departure_time, route_code, bus_identifier, status, version) VALUES (gen_random_uuid(), $1, $2, $3, $4, '', $5, $6)", change_set_id, departure.weekday, departure.departure_time, departure.route_code, status, version)
         for override in snapshot.overrides:
             await connection.execute("INSERT INTO transport_date_overrides (id, change_set_id, service_date, is_full_day_no_service, operation, route_code, bus_identifier, local_departure_time, status, version) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9)", change_set_id, override.service_date, override.is_full_day_no_service, override.operation.value if override.operation else None, override.route_code, override.bus_identifier, override.departure_time, status, version)
 
@@ -214,10 +224,10 @@ class PostgresChangeSetRepository:
         routes = await connection.fetch("SELECT route_code, origin, destination, direction FROM transport_routes WHERE change_set_id = $1", change_set_id)
         buses = await connection.fetch("SELECT bus_identifier FROM transport_buses WHERE change_set_id = $1", change_set_id)
         assignments = await connection.fetch("SELECT route_code, bus_identifier FROM transport_assignments WHERE change_set_id = $1", change_set_id)
-        departures = await connection.fetch("SELECT weekday, local_departure_time, route_code, bus_identifier FROM transport_weekly_departures WHERE change_set_id = $1", change_set_id)
+        departures = await connection.fetch("SELECT DISTINCT weekday, local_departure_time, route_code FROM transport_weekly_departures WHERE change_set_id = $1", change_set_id)
         overrides = await connection.fetch("SELECT service_date, is_full_day_no_service, operation, route_code, bus_identifier, local_departure_time FROM transport_date_overrides WHERE change_set_id = $1", change_set_id)
         return DraftTransportSnapshot(
-            routes=tuple(Route(row["route_code"], row["origin"], row["destination"], row["direction"]) for row in routes), buses=tuple(row["bus_identifier"] for row in buses), assignments=tuple(Assignment(row["route_code"], row["bus_identifier"]) for row in assignments), weekly_departures=tuple(WeeklyDeparture(row["weekday"], row["local_departure_time"], row["route_code"], row["bus_identifier"]) for row in departures), overrides=tuple(DepartureOverride(row["service_date"], row["is_full_day_no_service"], OverrideOperation(row["operation"]) if row["operation"] else None, row["route_code"], row["bus_identifier"], row["local_departure_time"]) for row in overrides),
+            routes=tuple(Route(row["route_code"], row["origin"], row["destination"], row["direction"]) for row in routes), buses=tuple(row["bus_identifier"] for row in buses), assignments=tuple(Assignment(row["route_code"], row["bus_identifier"]) for row in assignments), weekly_departures=tuple(WeeklyDeparture(row["weekday"], row["local_departure_time"], row["route_code"]) for row in departures), overrides=tuple(DepartureOverride(row["service_date"], row["is_full_day_no_service"], OverrideOperation(row["operation"]) if row["operation"] else None, row["route_code"], row["bus_identifier"], row["local_departure_time"]) for row in overrides),
         )
 
     @staticmethod

@@ -30,6 +30,8 @@ services:
       GOTRUE_URI_ALLOW_LIST: http://localhost:3001
       GOTRUE_JWT_SECRET: ${SUPABASE_JWT_SECRET:?Set SUPABASE_JWT_SECRET in infra/local/.env}
       GOTRUE_JWT_AUD: authenticated
+      # Must match UTS_SUPABASE_JWT_ISSUER so backend issuer validation remains enabled.
+      GOTRUE_JWT_ISSUER: http://localhost:9999
       GOTRUE_DISABLE_SIGNUP: "true"
       GOTRUE_MAILER_AUTOCONFIRM: "true"
     ports:

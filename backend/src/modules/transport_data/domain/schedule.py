@@ -28,7 +28,6 @@ class WeeklyDeparture:
     weekday: int
     departure_time: time
     route_code: str
-    bus_identifier: str
 
 
 class OverrideOperation(StrEnum):
@@ -94,7 +93,7 @@ class PublishedTransportSnapshot:
 @dataclass(frozen=True, slots=True)
 class ScheduledDeparture:
     route: Route
-    bus_identifier: str
+    bus_identifiers: tuple[str, ...]
     scheduled_departure_at: datetime
 
 
@@ -124,10 +123,16 @@ def daily_schedule(
     if any(override.is_full_day_no_service for override in relevant_overrides):
         return ()
 
+    assignments_by_route: dict[str, set[str]] = {}
+    for assignment in snapshot.assignments:
+        assignments_by_route.setdefault(assignment.route_code, set()).add(
+            assignment.bus_identifier
+        )
     entries = {
-        (departure.route_code, departure.bus_identifier, departure.departure_time)
+        (departure.route_code, bus_identifier, departure.departure_time)
         for departure in snapshot.weekly_departures
-        if departure.weekday == service_date.weekday()
+        if departure.weekday == service_date.isoweekday()
+        for bus_identifier in assignments_by_route.get(departure.route_code, set())
     }
     for override in relevant_overrides:
         if override.operation is None:
@@ -139,14 +144,17 @@ def daily_schedule(
             entries.add(key)
 
     routes = {route.route_code: route for route in snapshot.routes}
+    grouped: dict[tuple[str, time], set[str]] = {}
+    for route_code, bus_identifier, departure_time in entries:
+        grouped.setdefault((route_code, departure_time), set()).add(bus_identifier)
     return tuple(
         ScheduledDeparture(
             route=routes[route_code],
-            bus_identifier=bus_identifier,
+            bus_identifiers=tuple(sorted(bus_identifiers)),
             scheduled_departure_at=datetime.combine(service_date, departure_time, PKT),
         )
-        for route_code, bus_identifier, departure_time in sorted(
-            entries, key=lambda entry: (entry[2], entry[0], entry[1])
+        for (route_code, departure_time), bus_identifiers in sorted(
+            grouped.items(), key=lambda entry: (entry[0][1], entry[0][0])
         )
         if route_code in routes
     )
@@ -175,7 +183,7 @@ def current_departures(
                 entry
                 for entry in scheduled
                 if entry.route.route_code == assignment.route_code
-                and entry.bus_identifier == assignment.bus_identifier
+                and assignment.bus_identifier in entry.bus_identifiers
                 and entry.scheduled_departure_at >= now_pkt
             ),
             None,

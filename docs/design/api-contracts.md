@@ -29,7 +29,7 @@ This proposed REST contract is derived from `PRD.md`, `architecture.md`, `plan.m
 }
 ```
 
-`ScheduleResponse` includes `service_date`, `service_status` (`operating` or `no_service`), `entries`, and `published_at`. Each entry contains a route ID, separately maintained origin/destination/direction, bus identifier, and PKT scheduled departure.
+`ScheduleResponse` includes `service_date`, `service_status` (`operating` or `no_service`), `entries`, and `published_at`. Each entry contains a route ID, separately maintained origin/destination and `RETURN`/`PICK-UP` direction, every assigned bus identifier in `bus_identifiers`, and a PKT scheduled departure. Draft `weekly_departures` use weekday 1–7, Route, and departure time only; the backend derives buses from assignments.
 
 ```json
 // POST /public/feedback
@@ -45,7 +45,8 @@ Both privileged roles may manage transport data; only `transport_management` may
 | Method and path | Purpose | Rules |
 |---|---|---|
 | `POST /admin/transport/change-sets` | Create named draft. | Starts at current published baseline. |
-| `GET/PATCH /admin/transport/change-sets/{id}` | Read/save draft routes, buses, assignments, schedules, overrides. | Carries `base_published_change_set_id`; never public. |
+| `GET/PATCH /admin/transport/change-sets/{id}` | Read/save draft routes, buses, assignments, schedules, overrides. | Routes accept only `RETURN` or `PICK-UP`; schedules use weekday 1–7, Route, and time and derive all buses from assignments. Carries `base_published_change_set_id`; never public. |
+| `GET /admin/transport/change-sets?query=` | Search active draft change sets by name. | Returns matching drafts only; opening a result loads its private snapshot. |
 | `POST /admin/transport/change-sets/{id}/validate` | Calculate incomplete/conflict warnings. | Warnings do not block publication. |
 | `POST /admin/transport/change-sets/{id}/rebase` | Rebase stale draft. | Required before stale publish. |
 | `POST /admin/transport/change-sets/{id}/publish` | Atomically publish. | Explicit `publish_anyway` needed with warnings; one audit record + synchronous cache invalidation. |

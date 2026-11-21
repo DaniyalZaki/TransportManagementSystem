@@ -79,7 +79,7 @@ async def get_schedule(
                 "origin": entry.route.origin,
                 "destination": entry.route.destination,
                 "direction": entry.route.direction,
-                "bus_identifier": entry.bus_identifier,
+                "bus_identifiers": list(entry.bus_identifiers),
                 "scheduled_departure_at": entry.scheduled_departure_at.isoformat(),
             }
             for entry in entries

@@ -2,22 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --color-primary: #0f172a;
-  --color-accent: #a16207;
-  --color-background: #f8fafc;
-  --color-foreground: #020617;
-}
-
-body {
-  margin: 0;
-  background: var(--color-background);
-  color: var(--color-foreground);
-  font-family: Arial, sans-serif;
-  font-size: 16px;
-  line-height: 1.5;
-}
-
-* {
-  box-sizing: border-box;
-}
+:root { --ink: #0f172a; --muted: #475569; --canvas: #f1f5f9; --surface: #fff; --line: #cbd5e1; --brand: #0f3d70; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--canvas); color: var(--ink); font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; }
+.public-shell { margin: 0 auto; max-width: 880px; padding: 24px; }
+.public-header { margin-bottom: 24px; max-width: 640px; }.public-header h1, .public-card h2 { line-height: 1.15; margin: 0; }.public-header h1 { font-size: clamp(2rem, 6vw, 3.2rem); }.public-header p:last-child { color: var(--muted); margin-bottom: 0; }
+.public-eyebrow { color: var(--brand); font-size: .78rem; font-weight: 700; letter-spacing: .08em; margin: 0 0 4px; text-transform: uppercase; }.public-card, .public-notice { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 1px 3px rgb(15 23 42 / 8%); margin-top: 16px; padding: 20px; }.public-notice { border-left: 4px solid #b45309; }.public-notice h2 { margin: 0; }
+.section-title { align-items: flex-start; display: flex; gap: 16px; justify-content: space-between; }.section-title > time { color: var(--muted); font-size: .9rem; text-align: right; }.departure-list { list-style: none; margin: 16px 0 0; padding: 0; }.departure-list li { align-items: center; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; }.departure-list li > div { display: grid; gap: 2px; }.departure-list span { color: var(--muted); }.departure-list time { color: var(--brand); font-size: 1.15rem; font-weight: 700; }.departure-list small { font-size: .75rem; }.departure-list p { color: var(--muted); font-weight: 600; margin: 0; text-align: right; }
+.schedule-table-wrap { overflow-x: auto; }.public-schedule { border-collapse: collapse; margin-top: 16px; min-width: 620px; width: 100%; }.public-schedule th, .public-schedule td { border-top: 1px solid #e2e8f0; padding: 12px 8px; text-align: left; vertical-align: top; }.public-schedule th { color: var(--muted); font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; }.public-schedule td:first-child { color: var(--brand); font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }.public-schedule td:nth-child(2) span { color: var(--muted); display: block; font-size: .9rem; }.empty-state { color: var(--muted); margin: 18px 0 0; }
+@media (max-width: 600px) { .public-shell { padding: 16px; }.public-card { padding: 16px; }.section-title { display: block; }.section-title > time { display: block; margin-top: 8px; text-align: left; }.departure-list li { align-items: flex-start; }.public-schedule { min-width: 560px; } }

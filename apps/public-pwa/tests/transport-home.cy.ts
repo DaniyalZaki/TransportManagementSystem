@@ -27,8 +27,8 @@ describe("published transport information", () => {
           route_id: "R-01",
           origin: "Lahore",
           destination: "Campus",
-          direction: "Inbound",
-          bus_identifier: "C-12",
+          direction: "PICK-UP",
+          bus_identifiers: ["C-12", "C-13"],
           scheduled_departure_at: "2026-11-18T14:00:00+05:00",
         },
       ],
@@ -40,10 +40,11 @@ describe("published transport information", () => {
     cy.findByRole("heading", { name: /next departures/i }).should("be.visible");
     cy.contains("R-01").should("be.visible");
     cy.contains("C-12").should("be.visible");
+    cy.contains("C-13").should("be.visible");
     cy.contains("No further departures today").should("be.visible");
     cy.findByRole("heading", { name: /today's schedule/i }).should("be.visible");
     cy.contains("Lahore → Campus").should("be.visible");
-    cy.contains("Inbound").should("be.visible");
+    cy.contains("PICK-UP").should("be.visible");
     cy.findByRole("link", { name: /sign in/i }).should("not.exist");
   });
 });

@@ -39,7 +39,7 @@ class RouteInput(BaseModel):
     route_code: str = Field(min_length=1, max_length=80)
     origin: str = Field(min_length=1, max_length=160)
     destination: str = Field(min_length=1, max_length=160)
-    direction: str = Field(min_length=1, max_length=80)
+    direction: Literal["RETURN", "PICK-UP"]
 
 
 class AssignmentInput(BaseModel):
@@ -47,8 +47,9 @@ class AssignmentInput(BaseModel):
     bus_identifier: str = Field(min_length=1, max_length=80)
 
 
-class WeeklyDepartureInput(AssignmentInput):
-    weekday: int = Field(ge=0, le=6)
+class WeeklyDepartureInput(BaseModel):
+    weekday: int = Field(ge=1, le=7)
+    route_code: str = Field(min_length=1, max_length=80)
     departure_time: time
 
 
@@ -120,7 +121,7 @@ def _snapshot_response(snapshot: DraftTransportSnapshot) -> dict[str, object]:
         ],
         "weekly_departures": [
             {"weekday": x.weekday, "departure_time": x.departure_time.isoformat(),
-             "route_code": x.route_code, "bus_identifier": x.bus_identifier}
+             "route_code": x.route_code}
             for x in snapshot.weekly_departures
         ],
         "overrides": [
@@ -160,7 +161,7 @@ def _snapshot(payload: UpdateChangeSetRequest) -> DraftTransportSnapshot:
         buses=tuple(x.strip() for x in payload.buses if x.strip()),
         assignments=tuple(Assignment(x.route_code, x.bus_identifier) for x in payload.assignments),
         weekly_departures=tuple(
-            WeeklyDeparture(x.weekday, x.departure_time, x.route_code, x.bus_identifier)
+            WeeklyDeparture(x.weekday, x.departure_time, x.route_code)
             for x in payload.weekly_departures
         ),
         overrides=tuple(overrides),
@@ -178,6 +179,19 @@ async def create_change_set(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
         ) from error
+
+
+@router.get("/change-sets")
+async def search_change_sets(
+    request: Request, principal: Annotated[Principal, Depends(_principal)], query: str = "",
+) -> dict[str, object]:
+    try:
+        return {"change_sets": [
+            _response(change_set)
+            for change_set in await _service(request).search_drafts(query, principal)
+        ]}
+    except PermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
 
 
 @router.get("/change-sets/{change_set_id}")

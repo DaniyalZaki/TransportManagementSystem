@@ -112,26 +112,14 @@ class TransportChangeSetService:
     async def validate(self, change_set_id) -> tuple[TransportWarning, ...]:
         change_set = await self._required_draft(change_set_id)
         snapshot = await self._change_sets.snapshot(change_set.id)
-        assignments = {(item.route_code, item.bus_identifier) for item in snapshot.assignments}
+        assigned_routes = {item.route_code for item in snapshot.assignments}
         warnings: list[TransportWarning] = []
         for departure in snapshot.weekly_departures:
-            if (departure.route_code, departure.bus_identifier) not in assignments:
+            if departure.route_code not in assigned_routes:
                 warnings.append(TransportWarning(
                     "missing_assignment",
-                    f"{departure.route_code} / {departure.bus_identifier} at "
-                    f"{departure.departure_time.isoformat()} has no assignment",
-                ))
-        grouped: dict[tuple[int, str, object], set[str]] = {}
-        for departure in snapshot.weekly_departures:
-            grouped.setdefault(
-                (departure.weekday, departure.route_code, departure.departure_time), set()
-            ).add(departure.bus_identifier)
-        for (weekday, route, departure_time), buses in grouped.items():
-            if len(buses) > 1:
-                warnings.append(TransportWarning(
-                    "conflicting_assignment",
-                    f"{route} has conflicting buses at weekday {weekday}, "
-                    f"{departure_time.isoformat()}",
+                    f"{departure.route_code} at {departure.departure_time.isoformat()} "
+                    "has no assigned buses",
                 ))
         return tuple(warnings)
 
@@ -171,6 +159,12 @@ class TransportChangeSetService:
         self._require_privileged(principal)
         change_set = await self._required_draft(change_set_id)
         return change_set, await self._change_sets.snapshot(change_set_id)
+
+    async def search_drafts(
+        self, query: str, principal: Principal | None = None,
+    ) -> list[TransportChangeSet]:
+        self._require_privileged(principal)
+        return await self._change_sets.search_drafts(query)
 
     async def recover(
         self, source_change_set_id, publisher: str,

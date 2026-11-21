@@ -27,6 +27,9 @@ class ChangeSetRepository(Protocol):
     async def get(self, change_set_id: UUID) -> TransportChangeSet | None:
         ...
 
+    async def search_drafts(self, query: str) -> list[TransportChangeSet]:
+        ...
+
     async def snapshot(self, change_set_id: UUID) -> DraftTransportSnapshot:
         ...
 
