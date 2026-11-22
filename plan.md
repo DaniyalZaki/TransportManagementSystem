@@ -1,8 +1,8 @@
 # Implementation Plan
 
-- **Version:** 1.4
-- **Status:** S0, S1, and S2 complete; S3 implementation awaiting human review
-- **Source of truth:** `PRD.md`, `architecture.md`, `AGENTS.md`, and ADR-011
+- **Version:** 1.6
+- **Status:** S0, S1, S2, and S3 complete
+- **Source of truth:** `PRD.md`, `architecture.md`, `AGENTS.md`, ADR-011, and ADR-014
 - **History:** Git preserves every revision. A frozen copy of each accepted
   version is stored in `docs/plan-versions/`.
 
@@ -12,8 +12,8 @@ Deliver Uzair Transport Service as a modular monolith: a public Next.js PWA,
 a separate Next.js admin application, and a single-worker FastAPI backend
 backed by PostgreSQL. The release supplies published schedules/current
 departures, announcements and urgent banners, controlled transport publishing,
-SMTP feedback, and offline public access while preserving the documented
-draft/publish and recovery rules.
+SMTP feedback, protected public API admission, and offline public access while
+preserving the documented draft/publish and recovery rules.
 
 ## 2. Vertical slices
 
@@ -24,23 +24,25 @@ draft/publish and recovery rules.
 | S2 — Managed transport publishing | Authorized users create, validate, publish, retire, and recover atomic transport change sets | Transport Data, Audit, Authentication, Admin Web App |
 | S3 — Announcements and urgent operations | Public announcements and online-only urgent banners have the defined direct-publish lifecycle | Announcement, Public PWA, Admin Web App |
 | S4 — Feedback delivery | Public feedback is validated, delivered by SMTP, retried, and retained safely | Feedback |
-| S5 — Resilient PWA | Public data remains clearly labelled through fresh, stale, offline, and outage states | Public PWA |
-| S6 — Verification and release readiness | Functional, security, performance, and recovery evidence supports release acceptance | All modules |
+| S5 — Public API overload protection | A production deployment edge protects the API and database from excess public-read traffic and fails visibly | Platform, Public PWA |
+| S6 — Resilient PWA | Public data remains clearly labelled through fresh, stale, offline, and outage states | Public PWA |
+| S7 — Verification and release readiness | Functional, security, performance, overload, and recovery evidence supports release acceptance | All modules |
 
 ## 3. Sequence and dependencies
 
 ```text
 S0 Foundation
- ├── S1 Published transport ──┬── S3 Announcements ──┐
- ├── S2 Managed publishing ──┤                     ├── S5 Resilient PWA
- └── S4 Feedback             ┘                     └── S6 Verification
+ ├── S1 Published transport ──┬── S3 Announcements ──┬── S6 Resilient PWA ──┐
+ ├── S2 Managed publishing ──┤                     └── S5 Public API overload protection ─┤
+ └── S4 Feedback             ┘                                                       └── S7 Verification
 ```
 
 S0 is required before all implementation. S1 requires the published-read data
 model. S2 requires S0 authentication and S1 transport primitives. S3 and S4
-can proceed after S0/S1 boundaries exist. S5 depends on stable public APIs
-from S1 and S3. S6 spans every slice and is complete only after a production
-hosting decision enables RTO/RPO verification.
+can proceed after S0/S1 boundaries exist. S5 requires a production hosting
+decision and stable public-read endpoints from S1 and S3. S6 depends on stable
+public APIs from S1 and S3. S7 spans every slice and is complete only after a
+production hosting decision enables overload and RTO/RPO verification.
 
 ## 4. Tasks
 
@@ -119,7 +121,24 @@ hosting decision enables RTO/RPO verification.
 5. Delete feedback after 30 days and test delivery, retry, duplicate, honeypot,
    anonymous, and retention behavior.
 
-### S5 — Resilient PWA [HITL]
+### S5 — Public API overload protection [HITL]
+
+1. Select the production reverse proxy or load balancer and document its
+   configuration outside the repository; do not commit provider credentials.
+2. Route public and administrative API traffic through health checks for the
+   single FastAPI worker. Configure finite connection, request, and idle
+   timeouts, maximum request-body size, and a bounded pending-request queue.
+3. Configure per-client admission limits only for unauthenticated public read
+   endpoints. Exclude feedback from IP-based limiting and preserve its approved
+   honeypot and duplicate-detection policy.
+4. Set the backend PostgreSQL connection-pool ceiling below the verified safe
+   database capacity. Add operational alerts for health-check failure, queue
+   saturation, overload responses, worker saturation, and pool exhaustion.
+5. Test prompt `429`/`503` overload rejection and the Public PWA outage and
+   unavailable-first-use responses. Do not add a second FastAPI worker, shared
+   cache, or edge API-response cache.
+
+### S6 — Resilient PWA [HITL]
 
 1. Implement Workbox with Cache Storage/IndexedDB and a single snapshot
    timestamp for cached public data and announcements.
@@ -132,7 +151,7 @@ hosting decision enables RTO/RPO verification.
 5. Test browser behavior for cache expiry, refresh failure, reconnection, and
    public data isolation.
 
-### S6 — Verification and release readiness [HITL]
+### S7 — Verification and release readiness [HITL]
 
 1. Run formatter, linting, type checks, unit/integration tests, Cypress suites,
    build checks, and API-contract checks.
@@ -140,9 +159,12 @@ hosting decision enables RTO/RPO verification.
    scheduled departures; at least 95% must complete within five seconds.
 3. Verify urgent publication completes within one minute and public read paths
    remain unauthenticated.
-4. Select production hosting, backup, and recovery configuration, then run and
+4. Load-test the production edge and database pool at and above the approved
+   baseline. Verify overload requests are rejected promptly without exhausting
+   the FastAPI worker or PostgreSQL connections.
+5. Select production hosting, backup, and recovery configuration, then run and
    record RTO <= 4 hours / RPO <= 1 hour recovery testing.
-5. Evaluate every documented acceptance criterion; at least 95% must pass with
+6. Evaluate every documented acceptance criterion; at least 95% must pass with
    no critical defects before release.
 
 ## 5. Acceptance criteria
@@ -161,6 +183,9 @@ hosting decision enables RTO/RPO verification.
   banner removal/resolution behavior stays distinct.
 - Feedback meets honeypot, normalized duplicate, SMTP retry, anonymous, and
   retention rules without status tracking or IP limiting.
+- The production edge health-checks the backend, bounds public-read work before
+  it reaches the API/database, and returns prompt overload responses while the
+  PWA preserves its labelled outage/unavailable behavior.
 - Workbox PWA behavior correctly labels and preserves the single snapshot
   timestamp through fresh/stale/offline/outage states.
 - Verification meets the performance, urgent-publication, recovery, and
@@ -168,15 +193,16 @@ hosting decision enables RTO/RPO verification.
 
 ## 6. Progress / status
 
-| Slice | Status | Evidence / next gate | Human Decision
-|---|---|---|
+| Slice | Status | Evidence / next gate | Human Decision |
+|---|---|---|---|
 | S0 | Complete | Reviewed and pushed: FastAPI/auth/cache, local PostgreSQL/Supabase boundaries, separate Next.js clients, and Pytest/Cypress foundations; all current checks pass | Accept |
 | S1 | Complete | Published-only PostgreSQL read model, PKT schedule/current-departure API, responsive public views, and automated verification are complete | Accept |
 | S2 | Complete | Authorized change-set editing, validation/confirmation, atomic pointer + Audit publication writes, retention cleanup, recovery, and admin workflow complete; backend unit/API-contract and admin type/lint checks pass | Accept |
-| S3 | In review | Direct PKT announcement publication, independent urgent-banner lifecycle, public/admin APIs and experiences, and test coverage are implemented locally; no GitHub push pending human review | Review required before push |
+| S3 | Complete | Reviewed and pushed: direct PKT announcement publication, independent urgent-banner lifecycle, public/admin APIs and experiences; backend, type/lint, and Cypress checks passed | Accept |
 | S4 | Not started | Depends on S0 SMTP configuration boundary | |
-| S5 | Not started | Depends on stable public APIs | |
-| S6 | Not started | Production hosting and RTO/RPO choices are deferred | |
+| S5 | Not started | ADR-014 requires a deployment edge, bounded admission controls, database-pool limits, monitoring, and overload testing | Select provider and capacity limits |
+| S6 | Not started | Depends on stable public APIs | |
+| S7 | Not started | Production hosting, overload-capacity, and RTO/RPO choices are deferred | |
 
 ## 7. Constraints
 
@@ -185,6 +211,10 @@ hosting decision enables RTO/RPO verification.
   or deployable services without an approved architectural decision.
 - Use one FastAPI worker while the cache is in-process; do not scale to
   multiple workers without selecting a shared-cache approach.
+- Put a health-checked production deployment edge in front of the API. Bound
+  public-read work before it reaches the worker/database and do not apply
+  IP-based limits to feedback. Do not add edge API response caching without a
+  reviewed synchronous-invalidation design.
 - Use self-hosted Supabase Auth, backend-owned role mapping, and local active
   JWT validation. Do not build in-house credentials or sessions.
 - Use PKT for service dates, current departures, timestamps, and announcement

@@ -19,6 +19,7 @@ Students and the public view current departure status, bus/route schedules, and 
 | ASR-07 | Students/public read without authentication; only Transport Management and designated administrators (individual accounts) may edit or publish. | FR-01, C-01, C-02, BR-02, BR-08 | Security and access control |
 | ASR-08 | The client must work on mobile, laptop, and desktop, with mobile prioritized. | NFR-02, C-03 | Client architecture |
 | ASR-09 | Feedback submissions require a honeypot field, normalized-content duplicate rejection within a trailing 10-minute window, SMTP delivery/retry, and 30-day retention; IP-based limiting is explicitly excluded. | FR-09, BR-18 | Anti-abuse state handling |
+| ASR-10 | Public-read overload must be rejected before it exhausts the single API worker or PostgreSQL connection capacity. The Public PWA must retain its defined outage fallback. | ADR-014, FR-12, FR-13 | Admission control and graceful degradation |
 | CON-01 | No WhatsApp, GPS/live-tracking, payment, or AI chatbot integration is in scope for this release. | FR-15, BR-25, C-06 | Scope and integration boundary |
 
 ## 3. Selected architecture and rationale
@@ -40,14 +41,16 @@ Students and the public view current departure status, bus/route schedules, and 
 | ASR-06 (audit/versioning) | Full edit history, publication-only history | Full history is broader than the approved audit scope | Append-only, transactional transport-publication log with publisher and time; retained for 30 days |
 | ASR-07 (authentication/RBAC) | Custom authentication, managed Supabase Auth, self-hosted Supabase Auth | Custom authentication adds security burden; self-hosting retains deployment control | Self-hosted Supabase Auth on the PostgreSQL deployment; the backend owns role mapping and validates active JWTs locally |
 | ASR-09 (feedback) | Database-only duplicate check, third-party spam service | A spam service adds an unnecessary dependency | API honeypot validation, database duplicate check, and SMTP delivery with bounded retries |
+| ASR-10 (public overload) | Expose the API directly, application-only limits, health-checked deployment edge | Application-only limits compete for the same worker capacity; an edge rejects excess work before it reaches the worker or database | A reverse proxy/load balancer applies health checks, bounded queues/timeouts, and public-read admission control; the PWA provides the established outage fallback |
 | ASR-03, ASR-05, ASR-06 (primary data storage) | Single relational database, polyglot persistence (relational + document + separate audit store) | Polyglot persistence multiplies backup/recovery strategies, complicating a unified RTO/RPO | Single relational database as the system of record for all domain data, with point-in-time recovery/replication to meet RTO/RPO |
 
 ## 4. Component overview
 
 ```mermaid
 flowchart TD
-    PUI[Public PWA] --> API[Backend application API]
-    AUI[Admin Web App] --> API
+    PUI[Public PWA] --> EDGE[Deployment edge: proxy/load balancer]
+    AUI[Admin Web App] --> EDGE
+    EDGE --> API[Backend application API]
     API --> TD[Transport Data module]
     API --> ANN[Announcement module]
     API --> FB[Feedback module]
@@ -90,6 +93,7 @@ The Transport Data and Announcement modules remain the sole authorities for what
 | GetCurrentDeparture / GetSchedule | route or bus ID, date | Returns only published data; no authentication required. A weekly schedule row uses weekday 1–7, Route, and time, then expands to every bus assigned to that Route (ASR-07). |
 | SubmitFeedback | content, honeypot field | Rejects if honeypot is populated or a content-identical submission exists within the last 10 minutes (ASR-09). No IP-based checks |
 | GetPublicationHistory / RecoverPublishedChangeSet | change-set ID, date range | Returns transport-publication history for 30 days; recovery targets a whole previously published change set, never a draft (ASR-06) |
+| AdmitPublicRead | unauthenticated public read request | Deployment edge forwards only while healthy and within configured queue, timeout, and per-client read limits. Excess requests receive prompt `429` or `503`; feedback is excluded from this rate-limit rule (ASR-10). |
 
 ## 7. Architectural constraints
 
@@ -101,12 +105,14 @@ The Transport Data and Announcement modules remain the sole authorities for what
 6. The client must implement local persistence and a sync mechanism capable of distinguishing stale, offline, and outage states, per ASR-04. This logic lives entirely on the client against a locally stored timestamp.
 7. Authenticate privileged users through self-hosted Supabase Auth and enforce RBAC in the backend API from a backend-owned role mapping. The backend validates active JWTs locally; active sessions remain authorized until token expiry after deactivation. Public read endpoints remain unauthenticated. Do not build credential storage or session management in the backend.
 8. Do not introduce WhatsApp, GPS/live-tracking, payment, AI chatbot integrations, Kafka, Kubernetes, separate deployable microservices, or additional databases without an ASR-based justification and explicit approval (CON-01).
-9. Testing for publish-to-visible latency under load, draft/publish isolation, offline/stale/outage client behavior, audit recovery correctness, and feedback duplicate-detection behavior.
+9. Put a health-checked reverse proxy or load balancer in front of the production API. It must bound connection/request/idle timeouts, request size, pending requests, and database-pool use, and rate-limit only unauthenticated public reads. It must return `429` or `503` promptly under overload and must not apply IP-based limits to feedback.
+10. Testing for publish-to-visible latency under load, overload rejection and PWA outage behavior, draft/publish isolation, offline/stale/outage client behavior, audit recovery correctness, and feedback duplicate-detection behavior.
 
 ## 8. Important Decisions
 
 - **Technology stack:** Python/FastAPI backend; handwritten asynchronous PostgreSQL SQL and migrations; PostgreSQL; separate Next.js Public PWA and Admin Web App; Tailwind CSS with accessible headless components; Workbox; Pytest plus Cypress.
 - **Read cache:** A single FastAPI process/worker uses an in-process cache. Any move to multiple workers requires a shared-cache decision.
+- **Public API protection:** A production reverse proxy or load balancer health-checks the backend and enforces bounded connection/request/idle timeouts, queues, request sizes, public-read rate limits, and database-pool capacity. It returns prompt overload responses. This does not authorize multi-worker deployment or edge API response caching; see ADR-014.
 - **Identity:** Self-hosted Supabase Auth shares the PostgreSQL deployment. Privileged users sign in with email/password; Supabase defaults apply, MFA is not required, and roles are held in a backend-owned PostgreSQL mapping. Only Transport Management manages accounts. The first Transport Management account is manually created through Supabase administration; account deactivation blocks new login but active sessions run to token expiry. Temporary passwords are voluntarily changed.
 - **Data lifecycle:** One permanent shared draft is saved by all authorized users and is never expired or deleted by retention work. Publishing snapshots its current content atomically into a new published version; a warning and explicit confirmation is required only when one or more routes have no recurring schedule entry. A single worker serializes save/publish requests and assigns a temporary numeric execution-order ID. A recurring weekly schedule uses ISO weekday 1–7, Route, and PKT departure time; the Transport Data module expands it to every current Route-to-bus assignment. Published data is recoverable as whole change sets for 30 days. Retired published records are physically deleted 30 days after retirement.
 - **Feedback:** Send to a configured Transport Management mailbox using backend SMTP. Normalize case, leading/trailing whitespace, and repeated internal whitespace for duplicate detection. Retry failed mail after 1, 5, and 30 minutes; retain feedback for 30 days. Immediate SMTP failure displays an error; later successful retry is not reported. A resubmission while retry is pending receives a neutral “already received” message.
