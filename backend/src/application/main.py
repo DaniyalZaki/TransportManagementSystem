@@ -70,7 +70,12 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Uzair Transport Service API", version="0.1.0", lifespan=_lifespan)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:3001"],
+        allow_origins=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+        ],
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH"],
         allow_headers=["Authorization", "Content-Type"],
