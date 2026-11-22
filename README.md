@@ -263,6 +263,7 @@ evidence is maintained in [docs/design/test-cases.md](docs/design/test-cases.md)
 | [architecture.md](architecture.md) | Modular-monolith rationale, boundaries, interfaces, and constraints |
 | [plan.md](plan.md) | Approved vertical-slice implementation plan |
 | [ADR-011](docs/adr/ADR-011.md) | Current implementation/lifecycle profile; supersedes conflicting earlier ADR language |
+| [ADR-014](docs/adr/ADR-014.md) | Production-edge overload protection and Public PWA graceful-degradation decision |
 | [API contracts](docs/design/api-contracts.md) | Proposed REST contracts grounded in the approved source documents |
 | [Data model](docs/design/data-model.md) | Proposed PostgreSQL ownership, schema, lifecycle, and integrity rules |
 | [UI wireframes](docs/design/ui-wireframes.md) | Mobile-first public and administration wireframes |
@@ -272,4 +273,4 @@ evidence is maintained in [docs/design/test-cases.md](docs/design/test-cases.md)
 
 ## Scope and guardrails
 
-The portal does not include GPS/live tracking, payments, WhatsApp integration, an AI chatbot, IP-based feedback limiting, or a feedback status dashboard. Public clients never access PostgreSQL directly. Production hosting, SMTP credentials, and backup/recovery infrastructure remain release decisions and are intentionally not committed here.
+The portal does not include GPS/live tracking, payments, WhatsApp integration, an AI chatbot, IP-based feedback limiting, or a feedback status dashboard. Public clients never access PostgreSQL directly. A production reverse proxy or load balancer must health-check the single API worker and enforce bounded public-read admission controls; the provider and exact limits remain release configuration, selected from load testing. Production SMTP credentials and backup/recovery infrastructure remain release decisions and are intentionally not committed here.
