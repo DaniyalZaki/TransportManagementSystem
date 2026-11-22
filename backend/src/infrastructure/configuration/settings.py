@@ -20,6 +20,12 @@ class Settings:
     supabase_jwt_audience: str = DEFAULT_SUPABASE_AUDIENCE
     supabase_auth_url: str = DEFAULT_SUPABASE_AUTH_URL
     supabase_jwt_signing_key: str | None = None
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_sender: str | None = None
+    feedback_recipient: str | None = None
 
     def __init__(
         self,
@@ -29,6 +35,12 @@ class Settings:
         supabase_jwt_audience: str | None = None,
         supabase_auth_url: str | None = None,
         supabase_jwt_signing_key: str | None = None,
+        smtp_host: str | None = None,
+        smtp_port: int | None = None,
+        smtp_username: str | None = None,
+        smtp_password: str | None = None,
+        smtp_sender: str | None = None,
+        feedback_recipient: str | None = None,
         **_: object,
     ) -> None:
         resolved_database_url = database_url or getenv("UTS_DATABASE_URL", DEFAULT_DATABASE_URL)
@@ -62,3 +74,9 @@ class Settings:
             "supabase_jwt_signing_key",
             supabase_jwt_signing_key or getenv("UTS_SUPABASE_JWT_SIGNING_KEY"),
         )
+        object.__setattr__(self, "smtp_host", smtp_host or getenv("UTS_SMTP_HOST"))
+        object.__setattr__(self, "smtp_port", smtp_port or int(getenv("UTS_SMTP_PORT", "587")))
+        object.__setattr__(self, "smtp_username", smtp_username or getenv("UTS_SMTP_USERNAME"))
+        object.__setattr__(self, "smtp_password", smtp_password or getenv("UTS_SMTP_PASSWORD"))
+        object.__setattr__(self, "smtp_sender", smtp_sender or getenv("UTS_SMTP_SENDER"))
+        object.__setattr__(self, "feedback_recipient", feedback_recipient or getenv("UTS_FEEDBACK_RECIPIENT"))

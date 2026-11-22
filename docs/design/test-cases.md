@@ -42,6 +42,12 @@ Use Pytest for domain/repository/API integration; Cypress for public/admin workf
 | FB-05 | Integration | Initial SMTP failure | Retained, error returned, retry at 1 minute. |
 | FB-06 | Integration | Repeated SMTP failures | Only 1, 5, 30-minute retries; no later user notification. |
 | FB-07 | Privacy | Schema/routes inspection | No IP limiting/status dashboard exists. |
+| FB-08 | Unit | Duplicate exactly 10 minutes after the first receipt | Accepted: the duplicate window is the preceding 10 minutes, not an inclusive ten-minute boundary. |
+| FB-09 | API | Retry-pending normalized duplicate | Neutral `already received` response; no second feedback record or SMTP send. |
+| FB-10 | Unit | Retry later succeeds | Delivery is marked complete with no browser notification or status endpoint. |
+| FB-11 | Integration | Feedback older than 30 days | Cleanup deletes the record, including undelivered/exhausted records. |
+| FB-12 | Cypress | Anonymous form submission | Hidden honeypot remains empty, optional name/contact can be omitted, and a receipt is shown. |
+| FB-13 | Cypress | Immediate SMTP failure | Error is shown immediately; the form offers neither tracking nor later-success notification. |
 | PW-01 | Cypress | Successful sync | PKT timestamp saved; fresh through 5 minutes. |
 | PW-02 | Cypress | Failed refresh from cache | Timestamp unchanged; stale at >5 min. |
 | PW-03 | Cypress | Offline inside 24 hours | Cached data + offline warning; no cached active banners. |
@@ -74,6 +80,14 @@ Database transaction behavior is implemented in the PostgreSQL adapter: Audit
 joins the Transport Data transaction for both normal publication and recovery.
 The repository-level database integration remains part of Slice 6 release
 verification alongside the required performance benchmark.
+
+## S4 implementation verification record
+
+| ID | Automated evidence | Result |
+|---|---|---|
+| FB-01, FB-02, FB-03, FB-04, FB-05, FB-06, FB-08, FB-09, FB-10, FB-11 | `backend/tests/unit/test_feedback.py` | Passed — 9 domain scenarios, 2026-11-22. |
+| FB-01, FB-05, FB-09 | `backend/tests/integration/test_feedback_api_contract.py` | Passed — public OpenAPI contract and receipt/error/neutral response behavior, 2026-11-22. |
+| FB-12, FB-13 | `apps/public-pwa/tests/feedback.cy.ts` | Passed — anonymous receipt and immediate delivery-error UI, 2026-11-22. |
 
 ## Release evidence
 

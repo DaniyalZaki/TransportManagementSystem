@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +19,10 @@ from src.modules.announcement.presentation.router import (
     admin_router as announcement_admin_router,
     public_router as announcement_public_router,
 )
+from src.modules.feedback.application.services import FeedbackService
+from src.modules.feedback.infrastructure.repository import PostgresFeedbackRepository
+from src.modules.feedback.infrastructure.smtp_mailer import SmtpFeedbackMailer
+from src.modules.feedback.presentation.router import router as feedback_router
 
 
 @asynccontextmanager
@@ -31,16 +35,24 @@ async def _lifespan(_: FastAPI):
             PostgresAnnouncementRepository(Settings().database_url),
             _AnnouncementCacheForCleanup(),
         )
+        feedback_service = FeedbackService(
+            PostgresFeedbackRepository(Settings().database_url), SmtpFeedbackMailer(Settings())
+        )
+        last_hourly_cleanup: datetime | None = None
         while True:
             try:
                 now = datetime.now(UTC)
-                await audit.delete_expired(now)
-                await repository.delete_retired(now)
-                await announcement_service.cleanup()
+                await feedback_service.retry_due()
+                if last_hourly_cleanup is None or now - last_hourly_cleanup >= timedelta(hours=1):
+                    await audit.delete_expired(now)
+                    await repository.delete_retired(now)
+                    await announcement_service.cleanup()
+                    await feedback_service.cleanup()
+                    last_hourly_cleanup = now
             except Exception:
                 # The next run retries; serving public reads must not stop on cleanup failure.
                 pass
-            await asyncio.sleep(3600)
+            await asyncio.sleep(60)
 
     task = asyncio.create_task(retain())
     try:
@@ -68,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(transport_admin_router)
     app.include_router(announcement_public_router)
     app.include_router(announcement_admin_router)
+    app.include_router(feedback_router)
 
     @app.get("/health", tags=["platform"])
     def health() -> dict[str, str]:
