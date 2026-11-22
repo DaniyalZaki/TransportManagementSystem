@@ -13,6 +13,12 @@ from src.modules.transport_data.infrastructure.change_set_repository import (
     PostgresChangeSetRepository,
 )
 from src.modules.audit.application.publication_audit import PostgresPublicationAudit
+from src.modules.announcement.application.services import AnnouncementService
+from src.modules.announcement.infrastructure.repository import PostgresAnnouncementRepository
+from src.modules.announcement.presentation.router import (
+    admin_router as announcement_admin_router,
+    public_router as announcement_public_router,
+)
 
 
 @asynccontextmanager
@@ -21,11 +27,16 @@ async def _lifespan(_: FastAPI):
     async def retain() -> None:
         repository = PostgresChangeSetRepository(Settings().database_url)
         audit = PostgresPublicationAudit(Settings().database_url)
+        announcement_service = AnnouncementService(
+            PostgresAnnouncementRepository(Settings().database_url),
+            _AnnouncementCacheForCleanup(),
+        )
         while True:
             try:
                 now = datetime.now(UTC)
                 await audit.delete_expired(now)
                 await repository.delete_retired(now)
+                await announcement_service.cleanup()
             except Exception:
                 # The next run retries; serving public reads must not stop on cleanup failure.
                 pass
@@ -55,6 +66,8 @@ def create_app() -> FastAPI:
     app.include_router(authentication_router)
     app.include_router(transport_router)
     app.include_router(transport_admin_router)
+    app.include_router(announcement_public_router)
+    app.include_router(announcement_admin_router)
 
     @app.get("/health", tags=["platform"])
     def health() -> dict[str, str]:
@@ -64,3 +77,9 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+class _AnnouncementCacheForCleanup:
+    def invalidate_announcements(self) -> None:
+        # Retention cleanup does not affect active public content.
+        pass

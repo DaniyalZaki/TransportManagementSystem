@@ -18,6 +18,8 @@ type Departure = { route_code: string; weekday: number; departure_time: string }
 type Override = Assignment & { service_date: string; operation: "add" | "remove"; departure_time: string };
 type Snapshot = { routes: Route[]; buses: string[]; assignments: Assignment[]; weekly_departures: Departure[]; overrides: Override[] };
 type DraftResponse = ChangeSet & { snapshot: Snapshot };
+type PublishedAnnouncement = { id: string; title: string; content: string; expires_at: string | null };
+type PublishedBanner = { id: string };
 const emptySnapshot: Snapshot = { routes: [], buses: [], assignments: [], weekly_departures: [], overrides: [] };
 const tabs = ["Routes", "Buses", "Assignments", "Schedule"] as const;
 type Tab = typeof tabs[number];
@@ -45,6 +47,15 @@ export default function AdminHome() {
   const [assignment, setAssignment] = useState<Assignment>({ route_code: "", bus_identifier: "" });
   const [departure, setDeparture] = useState<Departure>({ route_code: "", weekday: 1, departure_time: "" });
   const [override, setOverride] = useState<Override>({ route_code: "", bus_identifier: "", service_date: "", operation: "add", departure_time: "" });
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [announcementContent, setAnnouncementContent] = useState("");
+  const [announcementUrgent, setAnnouncementUrgent] = useState(false);
+  const [announcementOperational, setAnnouncementOperational] = useState(false);
+  const [announcementConfirmed, setAnnouncementConfirmed] = useState(false);
+  const [announcementExpiry, setAnnouncementExpiry] = useState("");
+  const [publishedAnnouncement, setPublishedAnnouncement] = useState<PublishedAnnouncement>();
+  const [publishedBanner, setPublishedBanner] = useState<PublishedBanner>();
+  const [showAnnouncementEditor, setShowAnnouncementEditor] = useState(false);
 
   useEffect(() => {
     const token = sessionStorage.getItem("uts.access-token");
@@ -170,6 +181,27 @@ export default function AdminHome() {
     if (body) { setNotice({ tone: "success", text: "The published change set was recovered as the active transport data." }); await loadPublications(); }
   }
 
+  async function publishAnnouncement() {
+    if (!headers()) return setNotice({ tone: "warning", text: "Sign in before publishing an announcement." });
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/v1/admin/announcements`, { method: "POST", headers: headers(), body: JSON.stringify({ title: announcementTitle, content: announcementContent, expires_at: announcementExpiry ? `${announcementExpiry}:00+05:00` : null, urgent: announcementUrgent, operational: announcementOperational, confirmed_at: announcementOperational && announcementConfirmed ? new Date().toISOString() : null }) });
+      const body = await response.json() as { detail?: string; announcement?: PublishedAnnouncement; banner?: PublishedBanner | null };
+      if (!response.ok) return setNotice({ tone: "error", text: body.detail ?? "The announcement could not be published." });
+      setPublishedAnnouncement(body.announcement); setPublishedBanner(body.banner ?? undefined);
+      setNotice({ tone: "success", text: body.banner ? "Urgent announcement and persistent banner published." : "Announcement published." });
+      setAnnouncementTitle(""); setAnnouncementContent(""); setAnnouncementExpiry(""); setAnnouncementUrgent(false); setAnnouncementOperational(false); setAnnouncementConfirmed(false);
+    } catch { setNotice({ tone: "error", text: "The announcement could not reach the backend." }); }
+  }
+
+  async function lifecycleAction(path: string, success: string) {
+    if (!headers()) return;
+    const response = await fetch(`${apiBaseUrl}/api/v1/admin/${path}`, { method: "POST", headers: headers() });
+    if (!response.ok) return setNotice({ tone: "error", text: "The lifecycle action could not be completed." });
+    setNotice({ tone: "success", text: success });
+    if (path.includes("announcements/")) setPublishedAnnouncement(undefined);
+    if (path.includes("urgent-banners/")) setPublishedBanner(undefined);
+  }
+
 
   function addRoute() {
     if (!Object.values(route).every(Boolean)) return setNotice({ tone: "warning", text: "Complete every route field before adding it." });
@@ -251,6 +283,20 @@ export default function AdminHome() {
             <li>Accepting that warning publishes the current working draft.</li>
           </ol>
           <p className="muted-copy">Saving never changes public transport data. Save and publish requests receive a temporary operation number in their execution order.</p>
+        </section>
+        <section className="admin-card workflow-card announcement-card" aria-labelledby="announcement-heading">
+          <div className="section-heading"><div><p className="eyebrow">Direct publication</p><h2 id="announcement-heading">Announcements</h2></div><button type="button" className="secondary-action action-button" onClick={() => setShowAnnouncementEditor((open) => !open)}>Announcement</button></div>
+          <p className="muted-copy">Announcements publish directly. Operational changes require confirmation; urgent changes also create a separate persistent banner.</p>
+          {showAnnouncementEditor ? <div className="announcement-form">
+            <label>Title<input aria-label="Title" value={announcementTitle} onChange={(event) => setAnnouncementTitle(event.target.value)} /></label>
+            <label>Message<textarea aria-label="Message" value={announcementContent} onChange={(event) => setAnnouncementContent(event.target.value)} /></label>
+            <label>Expiry in PKT (optional)<input aria-label="Expiry in PKT" type="datetime-local" value={announcementExpiry} onChange={(event) => setAnnouncementExpiry(event.target.value)} /></label>
+            <label><input aria-label="Urgent" type="checkbox" checked={announcementUrgent} onChange={(event) => setAnnouncementUrgent(event.target.checked)} /> Urgent</label>
+            <label><input aria-label="Operational change" type="checkbox" checked={announcementOperational} onChange={(event) => setAnnouncementOperational(event.target.checked)} /> Operational change</label>
+            {announcementOperational ? <label><input aria-label="Confirmed" type="checkbox" checked={announcementConfirmed} onChange={(event) => setAnnouncementConfirmed(event.target.checked)} /> Confirmed operational change</label> : null}
+            <button type="button" onClick={publishAnnouncement}>Publish announcement</button>
+          </div> : null}
+          {publishedAnnouncement ? <div className="announcement-lifecycle" aria-label="Published announcement lifecycle"><p><strong>{publishedAnnouncement.title}</strong> is live.</p><button type="button" className="secondary-action" onClick={() => lifecycleAction(`announcements/${publishedAnnouncement.id}/remove`, "Announcement removed from public display.")}>Remove announcement</button>{publishedBanner ? <><button type="button" className="secondary-action" onClick={() => lifecycleAction(`urgent-banners/${publishedBanner.id}/remove`, "Urgent banner removed without resolving the issue.")}>Remove banner</button><button type="button" onClick={() => lifecycleAction(`urgent-banners/${publishedBanner.id}/resolve`, "Urgent banner resolved and removed from public display.")}>Resolve banner</button></> : null}</div> : null}
         </section>
         </> : null}
       </div>
