@@ -9,7 +9,7 @@ type ScheduleResponse = { service_date: string; service_status: "operating" | "n
 type Announcement = { id: string; title: string; content: string; published_at: string; expires_at: string | null };
 type UrgentBanner = { id: string; announcement_id: string; title: string; content: string; created_at: string };
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 function formatTime(instant: string): string {
   return new Intl.DateTimeFormat("en-PK", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Karachi" }).format(new Date(instant));
