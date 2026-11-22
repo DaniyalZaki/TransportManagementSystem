@@ -1,7 +1,7 @@
 # Implementation Plan
 
-- **Version:** 1.4
-- **Status:** S0, S1, and S2 complete; S3 implementation awaiting human review
+- **Version:** 1.5
+- **Status:** S0, S1, S2, and S3 complete
 - **Source of truth:** `PRD.md`, `architecture.md`, `AGENTS.md`, and ADR-011
 - **History:** Git preserves every revision. A frozen copy of each accepted
   version is stored in `docs/plan-versions/`.
@@ -168,12 +168,12 @@ hosting decision enables RTO/RPO verification.
 
 ## 6. Progress / status
 
-| Slice | Status | Evidence / next gate | Human Decision
-|---|---|---|
+| Slice | Status | Evidence / next gate | Human Decision |
+|---|---|---|---|
 | S0 | Complete | Reviewed and pushed: FastAPI/auth/cache, local PostgreSQL/Supabase boundaries, separate Next.js clients, and Pytest/Cypress foundations; all current checks pass | Accept |
 | S1 | Complete | Published-only PostgreSQL read model, PKT schedule/current-departure API, responsive public views, and automated verification are complete | Accept |
 | S2 | Complete | Authorized change-set editing, validation/confirmation, atomic pointer + Audit publication writes, retention cleanup, recovery, and admin workflow complete; backend unit/API-contract and admin type/lint checks pass | Accept |
-| S3 | In review | Direct PKT announcement publication, independent urgent-banner lifecycle, public/admin APIs and experiences, and test coverage are implemented locally; no GitHub push pending human review | Review required before push |
+| S3 | Complete | Reviewed and pushed: direct PKT announcement publication, independent urgent-banner lifecycle, public/admin APIs and experiences; backend, type/lint, and Cypress checks passed | Accept |
 | S4 | Not started | Depends on S0 SMTP configuration boundary | |
 | S5 | Not started | Depends on stable public APIs | |
 | S6 | Not started | Production hosting and RTO/RPO choices are deferred | |
