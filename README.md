@@ -1,6 +1,6 @@
-# Uzair Transport Service
+# Transport Management System
 
-Uzair Transport Service is the official public transport-information portal for the university community. Students and the public can view published departures, schedules, routes, announcements, and urgent notices without signing in. Authorized Transport Management staff and designated administrators use a separate administration application to manage and publish information.
+Students and the public can view published departures, schedules, routes, announcements, and urgent notices without signing in. Authorized Transport Management staff and designated administrators use a separate administration application to manage and publish information.
 
 The system is a modular monolith: two Next.js clients call one FastAPI backend, and PostgreSQL is the system of record. The approved requirements source is [PRD.md](PRD.md); architecture and implementation decisions are in [architecture.md](architecture.md) and [ADRs](docs/adr/).
 
@@ -112,6 +112,29 @@ Prerequisites: Python 3.11+, Node.js 20+, npm, and Docker Compose.
    ```powershell
    npm install
    ```
+
+## Configure SMTP feedback delivery
+
+The backend sends public feedback to the configured Transport Management
+mailbox using SMTP. Before starting the backend, set these values in the root
+`.env` file (copied from `.env.example` during setup):
+
+```dotenv
+UTS_SMTP_HOST=smtp.example.com
+UTS_SMTP_PORT=587
+UTS_SMTP_USERNAME=transport@example.com
+UTS_SMTP_PASSWORD=replace-with-an-app-password-or-smtp-password
+UTS_SMTP_SENDER=transport@example.com
+UTS_FEEDBACK_RECIPIENT=transport-management@example.com
+```
+
+`UTS_SMTP_HOST` and `UTS_FEEDBACK_RECIPIENT` are required for feedback
+delivery. `UTS_SMTP_SENDER` is optional and defaults to the recipient address.
+When `UTS_SMTP_USERNAME` is set, the backend uses STARTTLS and authenticates
+with the supplied username and password; leave both username and password
+empty only for an SMTP relay that does not require authentication. Port `587`
+is the default. Use provider-issued app passwords where required, and keep
+real SMTP credentials only in the uncommitted `.env` file.
 
 ## Bootstrap the first Transport Management account
 
