@@ -13,6 +13,7 @@ class MemoryAnnouncements:
     async def update(self, item): self.announcements[item.id] = item; return item
     async def get(self, identifier): return self.announcements.get(identifier)
     async def public_announcements(self, now): return tuple(item for item in self.announcements.values() if item.is_visible_at(now))
+    async def current_announcements(self, now): return await self.public_announcements(now)
     async def public_banners(self): return tuple(item for item in self.banners.values() if item.is_visible)
     async def add_banner(self, item): self.banners[item.id] = item; return item
     async def get_banner(self, identifier): return self.banners.get(identifier)
@@ -34,6 +35,7 @@ def test_announcement_routes_document_public_reads_and_privileged_lifecycle():
     assert "/api/v1/public/urgent-banners" in paths
     assert "security" not in paths["/api/v1/public/announcements"]["get"]
     assert "/api/v1/admin/announcements" in paths
+    assert "/api/v1/admin/announcements/current" in paths
     assert "/api/v1/admin/announcements/{announcement_id}" in paths
     assert "/api/v1/admin/announcements/{announcement_id}/remove" in paths
     assert "/api/v1/admin/urgent-banners/{banner_id}/remove" in paths

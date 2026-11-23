@@ -2,7 +2,8 @@ describe("public announcements", () => {
   it("shows announcements and independent active urgent banners newest first", () => {
     cy.intercept("GET", "**/api/v1/public/announcements", { announcements: [{ id: "a-2", title: "New notice", content: "Service update", published_at: "2026-11-22T09:00:00+05:00", expires_at: null }, { id: "a-1", title: "Older notice", content: "Earlier update", published_at: "2026-11-22T08:00:00+05:00", expires_at: null }] }).as("announcements");
     cy.intercept("GET", "**/api/v1/public/urgent-banners", { banners: [{ id: "b-1", announcement_id: "a-2", title: "New notice", content: "Service update", created_at: "2026-11-22T09:00:00+05:00" }] }).as("banners");
-    cy.intercept("GET", "**/api/v1/public/transport/**", { statusCode: 503, body: { detail: "unavailable" } });
+    cy.intercept("GET", "**/api/v1/public/transport/current-departures*", { service_date: "2026-11-22", published_at: "2026-11-22T08:00:00Z", departures: [] });
+    cy.intercept("GET", "**/api/v1/public/transport/schedule*", { service_date: "2026-11-22", service_status: "operating", published_at: "2026-11-22T08:00:00Z", entries: [] });
 
     cy.visit("/");
     cy.wait(["@announcements", "@banners"]);

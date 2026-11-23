@@ -27,6 +27,7 @@ class MemoryAnnouncements:
     async def get(self, identifier): return self.announcements.get(identifier)
     async def public_announcements(self, now):
         return tuple(sorted((item for item in self.announcements.values() if item.is_visible_at(now)), key=lambda item: item.published_at, reverse=True))
+    async def current_announcements(self, now): return await self.public_announcements(now)
     async def public_banners(self):
         return tuple(sorted((item for item in self.banners.values() if item.is_visible), key=lambda item: item.created_at, reverse=True))
     async def add_banner(self, banner): self.banners[banner.id] = banner; return banner

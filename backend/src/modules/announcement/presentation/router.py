@@ -66,6 +66,18 @@ async def urgent_banners(request: Request) -> dict[str, object]:
     return {"banners": [_banner(item) for item in await _service(request).public_banners()]}
 
 
+@admin_router.get("/announcements/current")
+async def current_announcements(request: Request, principal: Annotated[Principal, Depends(_principal)]) -> dict[str, object]:
+    try:
+        announcements, banners = await _service(request).current_items(principal)
+        return {
+            "announcements": [_announcement(item) for item in announcements],
+            "banners": [_banner(item) for item in banners],
+        }
+    except PermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
+
+
 @admin_router.post("/announcements", status_code=status.HTTP_201_CREATED)
 async def publish_announcement(payload: PublishAnnouncementRequest, request: Request, principal: Annotated[Principal, Depends(_principal)]) -> dict[str, object]:
     try:

@@ -172,7 +172,7 @@ async def open_draft(
         service = _service(request)
         draft = await service.open_draft(principal)
         _, snapshot = await service.get_draft(draft.id, principal)
-        return {**_response(draft), "snapshot": _snapshot_response(snapshot)}
+        return {**_response(draft), "snapshot": _snapshot_response(snapshot), "has_published_changes": await service.has_published_changes(draft.id, principal)}
     except (ValueError, PermissionError, ChangeSetConflict) as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
@@ -190,7 +190,7 @@ async def update_change_set(
         updated = await service.replace_snapshot(
             draft.id, payload.expected_version, _snapshot(payload), principal
         )
-        return _response(updated.draft)
+        return {**_response(updated.draft), "has_published_changes": await service.has_published_changes(updated.draft.id, principal)}
     except ChangeSetConflict as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

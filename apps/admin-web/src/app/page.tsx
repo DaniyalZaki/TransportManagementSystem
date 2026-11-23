@@ -17,9 +17,9 @@ type Assignment = { route_code: string; bus_identifier: string };
 type Departure = { route_code: string; weekday: number; departure_time: string };
 type Override = Assignment & { service_date: string; operation: "add" | "remove"; departure_time: string };
 type Snapshot = { routes: Route[]; buses: string[]; assignments: Assignment[]; weekly_departures: Departure[]; overrides: Override[] };
-type DraftResponse = ChangeSet & { snapshot: Snapshot };
-type PublishedAnnouncement = { id: string; title: string; content: string; expires_at: string | null };
-type PublishedBanner = { id: string };
+type DraftResponse = ChangeSet & { snapshot: Snapshot; has_published_changes: boolean };
+type PublishedAnnouncement = { id: string; title: string; content: string; published_at?: string; expires_at: string | null };
+type PublishedBanner = { id: string; announcement_id?: string; title?: string; content?: string; created_at?: string };
 const emptySnapshot: Snapshot = { routes: [], buses: [], assignments: [], weekly_departures: [], overrides: [] };
 const tabs = ["Routes", "Buses", "Assignments", "Schedule"] as const;
 type Tab = typeof tabs[number];
@@ -38,6 +38,8 @@ export default function AdminHome() {
   const [snapshot, setSnapshot] = useState<Snapshot>(emptySnapshot);
   const [savedSnapshot, setSavedSnapshot] = useState<Snapshot>(emptySnapshot);
   const [isSaving, setIsSaving] = useState(false);
+  const [hasPublishedChanges, setHasPublishedChanges] = useState(false);
+  const [editorExpanded, setEditorExpanded] = useState(true);
   const [publications, setPublications] = useState<Publication[]>([]);
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
@@ -53,9 +55,10 @@ export default function AdminHome() {
   const [announcementOperational, setAnnouncementOperational] = useState(false);
   const [announcementConfirmed, setAnnouncementConfirmed] = useState(false);
   const [announcementExpiry, setAnnouncementExpiry] = useState("");
-  const [publishedAnnouncement, setPublishedAnnouncement] = useState<PublishedAnnouncement>();
-  const [publishedBanner, setPublishedBanner] = useState<PublishedBanner>();
   const [showAnnouncementEditor, setShowAnnouncementEditor] = useState(false);
+  const [currentAnnouncements, setCurrentAnnouncements] = useState<PublishedAnnouncement[]>([]);
+  const [currentBanners, setCurrentBanners] = useState<PublishedBanner[]>([]);
+  const [lifecycleExpanded, setLifecycleExpanded] = useState(false);
 
   useEffect(() => {
     const token = sessionStorage.getItem("uts.access-token");
@@ -89,6 +92,8 @@ export default function AdminHome() {
         setChangeSet(body);
         setSnapshot(body.snapshot);
         setSavedSnapshot(body.snapshot);
+        setHasPublishedChanges(body.has_published_changes);
+        setEditorExpanded(true);
         setTab("Routes");
       }
     } catch {
@@ -105,7 +110,7 @@ export default function AdminHome() {
       const response = await fetch(`${apiBaseUrl}/api/v1/admin/transport/${path}`, {
         ...options, headers: { ...headers(), ...(options.headers ?? {}) },
       });
-      const body = await response.json() as ChangeSet & { detail?: string | { warnings?: { message: string }[] } };
+      const body = await response.json() as ChangeSet & { has_published_changes?: boolean; detail?: string | { warnings?: { message: string }[] } };
       if (!response.ok) {
         const detail = typeof body.detail === "string" ? body.detail : "The request could not be completed.";
         setNotice({ tone: "error", text: detail });
@@ -127,6 +132,7 @@ export default function AdminHome() {
     if (body) {
       setChangeSet(body);
       setSavedSnapshot(snapshot);
+      setHasPublishedChanges(Boolean(body.has_published_changes));
       setNotice({ tone: "success", text: `Draft saved privately (operation ${body.operation_order}).` });
     }
     setIsSaving(false);
@@ -187,7 +193,9 @@ export default function AdminHome() {
       const response = await fetch(`${apiBaseUrl}/api/v1/admin/announcements`, { method: "POST", headers: headers(), body: JSON.stringify({ title: announcementTitle, content: announcementContent, expires_at: announcementExpiry ? `${announcementExpiry}:00+05:00` : null, urgent: announcementUrgent, operational: announcementOperational, confirmed_at: announcementOperational && announcementConfirmed ? new Date().toISOString() : null }) });
       const body = await response.json() as { detail?: string; announcement?: PublishedAnnouncement; banner?: PublishedBanner | null };
       if (!response.ok) return setNotice({ tone: "error", text: body.detail ?? "The announcement could not be published." });
-      setPublishedAnnouncement(body.announcement); setPublishedBanner(body.banner ?? undefined);
+      if (body.announcement) setCurrentAnnouncements((items) => [body.announcement!, ...items.filter((item) => item.id !== body.announcement!.id)]);
+      if (body.banner) setCurrentBanners((items) => [body.banner!, ...items.filter((item) => item.id !== body.banner!.id)]);
+      setLifecycleExpanded(true);
       setNotice({ tone: "success", text: body.banner ? "Urgent announcement and persistent banner published." : "Announcement published." });
       setAnnouncementTitle(""); setAnnouncementContent(""); setAnnouncementExpiry(""); setAnnouncementUrgent(false); setAnnouncementOperational(false); setAnnouncementConfirmed(false);
     } catch { setNotice({ tone: "error", text: "The announcement could not reach the backend." }); }
@@ -198,8 +206,22 @@ export default function AdminHome() {
     const response = await fetch(`${apiBaseUrl}/api/v1/admin/${path}`, { method: "POST", headers: headers() });
     if (!response.ok) return setNotice({ tone: "error", text: "The lifecycle action could not be completed." });
     setNotice({ tone: "success", text: success });
-    if (path.includes("announcements/")) setPublishedAnnouncement(undefined);
-    if (path.includes("urgent-banners/")) setPublishedBanner(undefined);
+    const parts = path.split("/");
+    const identifier = parts[1];
+    if (path.startsWith("announcements/")) setCurrentAnnouncements((items) => items.filter((item) => item.id !== identifier));
+    if (path.startsWith("urgent-banners/")) setCurrentBanners((items) => items.filter((item) => item.id !== identifier));
+  }
+
+  async function loadCurrentAnnouncements() {
+    if (!headers()) return setNotice({ tone: "warning", text: "Sign in before loading announcements." });
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/v1/admin/announcements/current`, { headers: headers() });
+      const body = await response.json() as { announcements?: PublishedAnnouncement[]; banners?: PublishedBanner[]; detail?: string };
+      if (!response.ok) return setNotice({ tone: "error", text: body.detail ?? "Current announcements could not be loaded." });
+      setCurrentAnnouncements(body.announcements ?? []);
+      setCurrentBanners(body.banners ?? []);
+      setLifecycleExpanded(true);
+    } catch { setNotice({ tone: "error", text: "Current announcements could not be loaded. Check the connection and try again." }); }
   }
 
 
@@ -230,6 +252,7 @@ export default function AdminHome() {
   }
 
   const hasUnsavedChanges = JSON.stringify(snapshot) !== JSON.stringify(savedSnapshot);
+  const publishDisabled = hasUnsavedChanges || isSaving || !hasPublishedChanges;
 
   return (
     <main className="admin-shell">
@@ -248,10 +271,10 @@ export default function AdminHome() {
         </section> : null}
         {signedIn ? <>
         {changeSet ? <section className="admin-card workflow-card workspace-card" aria-labelledby="editor-heading">
-          <p className="eyebrow">Draft editor</p>
-          <h2 id="editor-heading">{changeSet.name}</h2>
+          <div className="section-heading"><div><p className="eyebrow">Draft editor</p><h2 id="editor-heading">{changeSet.name}</h2></div><button type="button" className="secondary-action action-button" aria-expanded={editorExpanded} aria-controls="draft-editor-content" onClick={() => setEditorExpanded((expanded) => !expanded)}>{editorExpanded ? "Collapse draft" : "Expand draft"}</button></div>
           <p className="muted-copy">Save changes privately before publishing. Saves and publications are processed one at a time.</p>
           {notice ? <p className={`notice notice-${notice.tone}`} role="status">{notice.text}</p> : null}
+          {editorExpanded ? <div id="draft-editor-content">
           <div className="workspace-tabs" role="tablist" aria-label="Draft data sections">
             {tabs.map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} className={tab === item ? "active-tab" : "secondary-action"} onClick={() => setTab(item)}>{item}</button>)}
           </div>
@@ -261,8 +284,9 @@ export default function AdminHome() {
           {tab === "Schedule" ? <div className="editor-panel"><div className="editor-fields"><select aria-label="Route" value={departure.route_code} onChange={(e) => setDeparture((current) => ({ ...current, route_code: e.target.value }))}><option value="">Select route</option>{snapshot.routes.map((item) => <option key={item.route_code} value={item.route_code}>{item.route_code}</option>)}</select><select aria-label="Weekday" value={departure.weekday} onChange={(e) => setDeparture((current) => ({ ...current, weekday: Number(e.target.value) }))}>{["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day, i) => <option key={day} value={i + 1}>{i + 1} — {day}</option>)}</select><input aria-label="Departure time" inputMode="numeric" pattern="[0-9]{2}:[0-9]{2}" placeholder="HH:MM" value={departure.departure_time} onChange={(e) => setDeparture((current) => ({ ...current, departure_time: e.target.value }))} /></div><p className="assignment-summary">Assigned buses: {snapshot.assignments.filter((item) => item.route_code === departure.route_code).map((item) => item.bus_identifier).join(", ") || "No buses assigned to this route yet."}</p><button type="button" onClick={addDeparture}>Add recurring departure</button><DataTable rows={snapshot.weekly_departures.map((item) => ({ ...item, buses: snapshot.assignments.filter((assignment) => assignment.route_code === item.route_code).map((assignment) => assignment.bus_identifier).join(", ") || "No buses assigned" }))} columns={["weekday", "route_code", "buses", "departure_time"]} onRemove={(i) => setSnapshot((s) => ({ ...s, weekly_departures: s.weekly_departures.filter((_, index) => index !== i) }))} /></div> : null}
           <div className="action-row">
             <button type="button" onClick={saveDraft} disabled={isSaving}>{isSaving ? "Saving…" : "Save draft"}</button>
-            <button type="button" onClick={publishDraft} disabled={hasUnsavedChanges || isSaving} title={hasUnsavedChanges ? "Save Draft before publishing." : undefined}>Publish</button>
+            <button type="button" onClick={publishDraft} disabled={publishDisabled} title={hasUnsavedChanges ? "Save Draft before publishing." : !hasPublishedChanges ? "The draft matches the published transport data." : undefined}>Publish</button>
           </div>
+          </div> : null}
         </section> : null}
         <section className="admin-card workflow-card history-card" aria-labelledby="history-heading">
           <div className="section-heading"><div><p className="eyebrow">Audit</p><h2 id="history-heading">Publication history</h2></div><button type="button" className="secondary-action action-button" aria-expanded={historyExpanded} aria-controls="publication-history" onClick={historyExpanded ? () => setHistoryExpanded(false) : loadPublications}>{historyExpanded ? "Hide history" : "Load history"}</button></div>
@@ -296,7 +320,10 @@ export default function AdminHome() {
             {announcementOperational ? <label><input aria-label="Confirmed" type="checkbox" checked={announcementConfirmed} onChange={(event) => setAnnouncementConfirmed(event.target.checked)} /> Confirmed operational change</label> : null}
             <button type="button" onClick={publishAnnouncement}>Publish announcement</button>
           </div> : null}
-          {publishedAnnouncement ? <div className="announcement-lifecycle" aria-label="Published announcement lifecycle"><p><strong>{publishedAnnouncement.title}</strong> is live.</p><button type="button" className="secondary-action" onClick={() => lifecycleAction(`announcements/${publishedAnnouncement.id}/remove`, "Announcement removed from public display.")}>Remove announcement</button>{publishedBanner ? <><button type="button" className="secondary-action" onClick={() => lifecycleAction(`urgent-banners/${publishedBanner.id}/remove`, "Urgent banner removed without resolving the issue.")}>Remove banner</button><button type="button" onClick={() => lifecycleAction(`urgent-banners/${publishedBanner.id}/resolve`, "Urgent banner resolved and removed from public display.")}>Resolve banner</button></> : null}</div> : null}
+        </section>
+        <section className="admin-card workflow-card announcement-lifecycle-card" aria-labelledby="announcement-lifecycle-heading">
+          <div className="section-heading"><div><p className="eyebrow">Lifecycle</p><h2 id="announcement-lifecycle-heading">Current announcements and banners</h2></div><button type="button" className="secondary-action action-button" aria-expanded={lifecycleExpanded} aria-controls="announcement-lifecycle-content" onClick={lifecycleExpanded ? () => setLifecycleExpanded(false) : loadCurrentAnnouncements}>{lifecycleExpanded ? "Hide current items" : "Load current items"}</button></div>
+          {lifecycleExpanded ? <div id="announcement-lifecycle-content" className="announcement-lifecycle"><div><h3>Announcements</h3>{currentAnnouncements.length ? currentAnnouncements.map((item) => <div className="lifecycle-item" key={item.id}><strong>{item.title}</strong><button type="button" className="secondary-action" onClick={() => lifecycleAction(`announcements/${item.id}/remove`, "Announcement removed from public display.")}>Remove announcement</button></div>) : <p className="muted-copy">No current announcements.</p>}</div><div><h3>Urgent banners</h3>{currentBanners.length ? currentBanners.map((item) => <div className="lifecycle-item" key={item.id}><strong>{item.title ?? "Urgent banner"}</strong><span><button type="button" className="secondary-action" onClick={() => lifecycleAction(`urgent-banners/${item.id}/remove`, "Urgent banner removed without resolving the issue.")}>Remove banner</button><button type="button" onClick={() => lifecycleAction(`urgent-banners/${item.id}/resolve`, "Urgent banner resolved and removed from public display.")}>Resolve banner</button></span></div>) : <p className="muted-copy">No active urgent banners.</p>}</div></div> : null}
         </section>
         </> : null}
       </div>

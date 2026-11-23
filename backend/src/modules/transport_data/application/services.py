@@ -194,6 +194,22 @@ class TransportChangeSetService:
         change_set = await self._required_draft(change_set_id)
         return change_set, await self._change_sets.snapshot(change_set_id)
 
+    async def has_published_changes(
+        self, change_set_id, principal: Principal | None = None,
+    ) -> bool:
+        """Return whether draft content differs from the current published snapshot."""
+        self._require_privileged(principal)
+        draft = await self._required_draft(change_set_id)
+        draft_snapshot = await self._change_sets.snapshot(draft.id)
+        published = await self._change_sets.current_published()
+        if published is None:
+            return self._snapshot_key(draft_snapshot) != self._snapshot_key(
+                DraftTransportSnapshot((), (), (), (), ())
+            )
+        return self._snapshot_key(draft_snapshot) != self._snapshot_key(
+            await self._change_sets.snapshot(published.id)
+        )
+
     async def recover(
         self, source_change_set_id, publisher: str,
         principal: Principal | None = None,
@@ -237,6 +253,17 @@ class TransportChangeSetService:
         if change_set.status is not TransportChangeSetStatus.DRAFT:
             raise ChangeSetConflict("Only an active draft can be changed or published")
         return change_set
+
+    @staticmethod
+    def _snapshot_key(snapshot: DraftTransportSnapshot) -> tuple[object, ...]:
+        """Compare snapshot content, without treating query order as a change."""
+        return (
+            tuple(sorted((item.route_code, item.origin, item.destination, item.direction) for item in snapshot.routes)),
+            tuple(sorted(snapshot.buses)),
+            tuple(sorted((item.route_code, item.bus_identifier) for item in snapshot.assignments)),
+            tuple(sorted((item.weekday, item.departure_time.isoformat(), item.route_code) for item in snapshot.weekly_departures)),
+            tuple(sorted((item.service_date.isoformat(), item.is_full_day_no_service, item.operation.value if item.operation else None, item.route_code, item.bus_identifier, item.departure_time.isoformat() if item.departure_time else None) for item in snapshot.overrides)),
+        )
 
     @classmethod
     def _mutation_gate(cls):
