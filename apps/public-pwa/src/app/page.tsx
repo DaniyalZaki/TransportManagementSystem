@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Workbox } from "workbox-window";
 import { type Announcement, type CurrentDeparture, type CurrentDeparturesResponse, type PublicSnapshot, type ScheduleResponse, type UrgentBanner, cacheIsUsable, isStale, readSnapshot, synchronize } from "../lib/public-data";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -32,7 +31,7 @@ export default function PublicHome() {
     finally { setIsRefreshing(false); }
   }, []);
 
-  useEffect(() => { if ("serviceWorker" in navigator) void new Workbox("/sw.js").register().catch(() => undefined); }, []);
+  useEffect(() => { if ("serviceWorker" in navigator) void navigator.serviceWorker.register("/sw.js").catch(() => undefined); }, []);
   useEffect(() => { let mounted = true; void readSnapshot().catch(() => null).then((saved) => { if (!mounted) return; const cached = saved && cacheIsUsable(saved) ? saved : null; snapshotRef.current = cached; setSnapshot(cached); if (!navigator.onLine) { setAvailability(cached ? "offline" : "unavailable"); return; } void refresh(cached); }); return () => { mounted = false; }; }, [refresh]);
   useEffect(() => { const onOffline = () => { const cached = snapshotRef.current; setBanners([]); setAvailability(cached && cacheIsUsable(cached) ? "offline" : "unavailable"); }; const onOnline = () => void refresh(); window.addEventListener("offline", onOffline); window.addEventListener("online", onOnline); window.onoffline = onOffline; window.ononline = onOnline; const interval = window.setInterval(() => void refresh(), 60_000); return () => { window.removeEventListener("offline", onOffline); window.removeEventListener("online", onOnline); if (window.onoffline === onOffline) window.onoffline = null; if (window.ononline === onOnline) window.ononline = null; window.clearInterval(interval); }; }, [refresh]);
 
