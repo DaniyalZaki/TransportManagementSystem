@@ -1,7 +1,7 @@
 # Implementation Plan
 
-- **Version:** 1.8
-- **Status:** S0, S1, S2, S3, and S4 complete
+- **Version:** 1.9
+- **Status:** S0, S1, S2, S3, S4, and S5 complete
 - **Source of truth:** `PRD.md`, `architecture.md`, `AGENTS.md`, and ADR-011
 - **History:** Git preserves every revision. A frozen copy of each accepted
   version is stored in `docs/plan-versions/`.
@@ -179,7 +179,7 @@ decision enables RTO/RPO verification.
 | S2 | Complete | Authorized change-set editing, validation/confirmation, atomic pointer + Audit publication writes, retention cleanup, recovery, and admin workflow complete; backend unit/API-contract and admin type/lint checks pass | Accept |
 | S3 | Complete | Reviewed and pushed: direct PKT announcement publication, independent urgent-banner lifecycle, public/admin APIs and experiences; backend, type/lint, and Cypress checks passed | Accept |
 | S4 | Complete | Anonymous Feedback form, Feedback-owned PostgreSQL validation/delivery state, SMTP adapter, scheduled retry/retention work, and public API/PWA verification complete | Configure production SMTP recipient and credentials before release |
-| S5 | Not started | Depends on stable public APIs | |
+| S5 | Complete | Workbox/IndexedDB public snapshot, 24-hour retention, PKT sync timestamp, fresh/stale/offline/outage/unavailable states, manual/reconnect/minute sync, and Firefox-safe cache-bypassing live reads verified by Cypress | Review required before release |
 | S6 | Not started | Production hosting and RTO/RPO choices are deferred | |
 
 ## 7. Constraints

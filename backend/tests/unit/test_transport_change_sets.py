@@ -1,6 +1,6 @@
 # flake8: noqa
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from uuid import uuid4
 
 import pytest
@@ -94,3 +94,33 @@ def test_simultaneous_saves_are_processed_in_order_without_silent_overwrite():
     assert isinstance(second, ChangeSetConflict)
     assert second.operation_order is not None
     assert second.operation_order > first.draft.operation_order
+
+
+def test_draft_reports_changes_only_when_it_differs_from_current_publication():
+    repo = MemoryChangeSets()
+    app = make_service(repo)
+    draft = asyncio.run(app.open_draft())
+    published_snapshot = DraftTransportSnapshot(
+        (Route("R-1", "A", "B", "RETURN"),),
+        ("C-1",),
+        (Assignment("R-1", "C-1"),),
+        (WeeklyDeparture(1, time(8, 30), "R-1"),),
+        (),
+    )
+    repo.snapshots[draft.id] = published_snapshot
+    repo.current = TransportChangeSet(
+        uuid4(), "Published", TransportChangeSetStatus.PUBLISHED, 1, None,
+        datetime(2026, 11, 21, tzinfo=UTC), datetime(2026, 11, 21, tzinfo=UTC),
+        datetime.max.replace(tzinfo=UTC),
+    )
+    repo.snapshots[repo.current.id] = published_snapshot
+
+    assert asyncio.run(app.has_published_changes(draft.id)) is False
+
+    changed = DraftTransportSnapshot(
+        published_snapshot.routes, published_snapshot.buses, published_snapshot.assignments,
+        (WeeklyDeparture(1, time(9), "R-1"),), (),
+    )
+    repo.snapshots[draft.id] = changed
+
+    assert asyncio.run(app.has_published_changes(draft.id)) is True

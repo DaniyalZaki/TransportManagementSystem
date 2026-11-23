@@ -59,6 +59,15 @@ class AnnouncementService:
     async def public_announcements(self) -> tuple[Announcement, ...]:
         return await self._repository.public_announcements(self._clock())
 
+    async def current_items(
+        self, principal: Principal | None = None,
+    ) -> tuple[tuple[Announcement, ...], tuple[UrgentBanner, ...]]:
+        self._require_privileged(principal)
+        return (
+            await self._repository.current_announcements(self._clock()),
+            await self._repository.public_banners(),
+        )
+
     async def remove_announcement(self, identifier: UUID, principal: Principal | None = None) -> Announcement:
         self._require_privileged(principal)
         updated = await self._repository.update((await self._required(identifier)).remove(self._clock()))

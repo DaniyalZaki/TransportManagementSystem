@@ -1,4 +1,20 @@
 describe("announcement administration", () => {
+  it("loads current announcements and banners into a separate lifecycle card", () => {
+    cy.intercept("GET", "**/auth/session", { supabase_user_id: "admin", role: "designated_administrator", active: true }).as("session");
+    cy.intercept("GET", "**/api/v1/admin/announcements/current", {
+      announcements: [{ id: "a-1", title: "Diversion", content: "Use gate B", published_at: "2026-11-22T09:00:00+05:00", expires_at: null }],
+      banners: [{ id: "b-1", announcement_id: "a-1", title: "Diversion", content: "Use gate B", created_at: "2026-11-22T09:00:00+05:00" }],
+    }).as("currentItems");
+    cy.visit("/", { onBeforeLoad(window) { window.sessionStorage.setItem("uts.access-token", "test-token"); } });
+    cy.wait("@session");
+    cy.findByRole("button", { name: /load current items/i }).click();
+    cy.wait("@currentItems");
+    cy.findByRole("heading", { name: /current announcements and banners/i }).should("be.visible");
+    cy.get("#announcement-lifecycle-content").findByRole("heading", { name: /^announcements$/i }).should("be.visible");
+    cy.get("#announcement-lifecycle-content").contains("Diversion").should("be.visible");
+    cy.findByRole("button", { name: /resolve banner/i }).should("be.visible");
+  });
+
   it("publishes an urgent confirmed operational change directly", () => {
     cy.intercept("GET", "**/auth/session", { supabase_user_id: "admin", role: "designated_administrator", active: true }).as("session");
     cy.intercept("POST", "**/api/v1/admin/announcements", (request) => {

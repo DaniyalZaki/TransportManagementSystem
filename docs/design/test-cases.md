@@ -55,6 +55,16 @@ Use Pytest for domain/repository/API integration; Cypress for public/admin workf
 | PW-05 | Cypress | No cache + unavailable service | Unavailable, no fabricated empty schedule. |
 | PW-06 | Cypress | Cache >24 hours | Unavailable offline. |
 | PW-07 | Cypress | Reconnection | Sync attempts; warnings clear only after success. |
+| PW-09 | Cypress | First successful public sync | Persist the complete published transport and announcement snapshot with one PKT last-successful-sync time; show it and no stale warning through exactly five minutes. |
+| PW-10 | Cypress | Cached snapshot is older than five minutes | Retain its original PKT timestamp and show “Information may be outdated”; a failed reload or interval refresh does not change either. |
+| PW-11 | Cypress | Online API failure with a valid cached snapshot | Show cached transport/announcements, a distinct service/data-outage warning, and (when applicable) the stale warning; never show offline. |
+| PW-12 | Cypress | Offline with a valid cached snapshot | Show cached transport/announcements, offline and (when applicable) stale warnings, the original timestamp, and no urgent banner. |
+| PW-13 | Cypress | First use or expired cache while offline/outage | Show unavailable state only; do not fabricate an empty or current-looking schedule. |
+| PW-14 | Cypress | Snapshot reaches exactly 24 hours | Treat it as expired and unavailable for offline display; snapshots younger than 24 hours remain available. |
+| PW-15 | Cypress | Browser reconnects after offline use | Attempt refresh immediately; only a successful full retrieval replaces the snapshot, advances its timestamp, clears warnings, and may render freshly fetched banners. |
+| PW-16 | Cypress | Manual refresh | Attempt refresh; success replaces all cacheable public payloads and advances the timestamp, while failure retains the prior snapshot/time and warning. |
+| PW-17 | Cypress | Application remains open for one minute | Perform a synchronization attempt every 60 seconds; failure must not advance the persisted timestamp or clear a warning. |
+| PW-18 | Cypress | Service-worker cache policy | A Workbox service worker caches only public published transport and announcement API reads for at most 24 hours; it never caches `/public/urgent-banners`, privileged routes, or draft data. |
 | UX-01 | Cypress/a11y | Mobile/keyboard/semantic check | Core workflows usable and accessible. |
 
 ## S1 verification record
@@ -88,6 +98,15 @@ verification alongside the required performance benchmark.
 | FB-01, FB-02, FB-03, FB-04, FB-05, FB-06, FB-08, FB-09, FB-10, FB-11 | `backend/tests/unit/test_feedback.py` | Passed — 9 domain scenarios, 2026-11-22. |
 | FB-01, FB-05, FB-09 | `backend/tests/integration/test_feedback_api_contract.py` | Passed — public OpenAPI contract and receipt/error/neutral response behavior, 2026-11-22. |
 | FB-12, FB-13 | `apps/public-pwa/tests/feedback.cy.ts` | Passed — anonymous receipt and immediate delivery-error UI, 2026-11-22. |
+
+## S5 implementation verification record
+
+| ID | Automated evidence | Result |
+|---|---|---|
+| PW-01, PW-02, PW-04, PW-05, PW-07, PW-09, PW-10, PW-11, PW-13, PW-15, PW-16, PW-17 | `apps/public-pwa/tests/resilience.cy.ts` | Passed — one successful PKT snapshot timestamp; failed refresh and one-minute retry retain cache/timestamp; outage, unavailable-first-use, manual refresh, and reconnect behaviors, 2026-11-23. |
+| PW-03, PW-12 | `apps/public-pwa/tests/resilience.cy.ts` | Passed — offline state keeps the published snapshot and removes online-only urgent banners, 2026-11-23. |
+| PW-06, PW-14 | `apps/public-pwa/tests/resilience.cy.ts` | Passed — exactly five minutes remains fresh and a snapshot is expired at exactly 24 hours, 2026-11-23. |
+| PW-18 | `apps/public-pwa/public/sw.js`, `apps/public-pwa/src/lib/public-data.ts` | Implemented — Workbox matches only cacheable public transport/announcement reads; snapshot storage writes no urgent-banner data, 2026-11-23. |
 
 ## Release evidence
 

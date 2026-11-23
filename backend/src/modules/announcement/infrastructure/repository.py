@@ -29,6 +29,9 @@ class PostgresAnnouncementRepository:
             rows = await connection.fetch("""SELECT * FROM announcements WHERE removed_at IS NULL AND (expires_at IS NULL OR expires_at > $1) ORDER BY published_at DESC""", now)
         return tuple(_announcement(row) for row in rows)
 
+    async def current_announcements(self, now: datetime) -> tuple[Announcement, ...]:
+        return await self.public_announcements(now)
+
     async def add_banner(self, item: UrgentBanner) -> UrgentBanner:
         async with open_connection(self._database_url) as connection:
             await connection.execute("INSERT INTO urgent_banners (id, announcement_id, title, content, created_at) VALUES ($1,$2,$3,$4,$5)", item.id, item.announcement_id, item.title, item.content, item.created_at)
