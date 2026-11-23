@@ -1,6 +1,6 @@
-# Uzair Transport Service
+# Transport Management System
 
-Uzair Transport Service is the official public transport-information portal for the university community. Students and the public can view published departures, schedules, routes, announcements, and urgent notices without signing in. Authorized Transport Management staff and designated administrators use a separate administration application to manage and publish information.
+Students and the public can view published departures, schedules, routes, announcements, and urgent notices without signing in. Authorized Transport Management staff and designated administrators use a separate administration application to manage and publish information.
 
 The system is a modular monolith: two Next.js clients call one FastAPI backend, and PostgreSQL is the system of record. The approved requirements source is [PRD.md](PRD.md); architecture and implementation decisions are in [architecture.md](architecture.md) and [ADRs](docs/adr/).
 
