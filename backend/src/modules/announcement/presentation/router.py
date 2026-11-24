@@ -18,16 +18,14 @@ admin_router = APIRouter(prefix="/api/v1/admin", tags=["announcement administrat
 
 class PublishAnnouncementRequest(BaseModel):
     title: str = Field(min_length=1, max_length=180)
-    content: str = Field(min_length=1, max_length=4000)
+    content: str = Field(default="", max_length=4000)
     expires_at: datetime | None = None
     urgent: bool = False
-    operational: bool = False
-    confirmed_at: datetime | None = None
 
 
 class EditAnnouncementRequest(BaseModel):
     title: str = Field(min_length=1, max_length=180)
-    content: str = Field(min_length=1, max_length=4000)
+    content: str = Field(default="", max_length=4000)
     expires_at: datetime | None = None
 
 
@@ -81,7 +79,7 @@ async def current_announcements(request: Request, principal: Annotated[Principal
 @admin_router.post("/announcements", status_code=status.HTTP_201_CREATED)
 async def publish_announcement(payload: PublishAnnouncementRequest, request: Request, principal: Annotated[Principal, Depends(_principal)]) -> dict[str, object]:
     try:
-        result = await _service(request).publish(payload.title, payload.content, payload.expires_at, payload.urgent, payload.operational, payload.confirmed_at, principal)
+        result = await _service(request).publish(payload.title, payload.content, payload.expires_at, payload.urgent, principal)
         return {"announcement": _announcement(result.announcement), "banner": _banner(result.banner) if result.banner else None}
     except InvalidAnnouncement as error:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error

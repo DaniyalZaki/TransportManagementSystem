@@ -136,10 +136,10 @@ The user wants to stay up to date with daily coaster timings, routes and announc
 - **FR-01:** The system shall display departure-time information to students and the public without requiring Login.
 - **FR-02:** The system shall display the next-upcoming departure instance for each Route and Bus/Service Identifier for the current service date. Each departure instance shall be identified by service date, scheduled departure date/time, Route, and Bus/Service Identifier. The system shall not imply that a departure is currently in motion or GPS-tracked. If no later departure exists for a Route and Bus/Service Identifier on that service date, the system shall display “No further departures today” for that service grouping.
 - **FR-03:** The system shall display the daily Schedule / Timetable with weekday values 1–7 (Monday–Sunday), a unique Route identifier, the complete set of Bus/Service Identifiers assigned to that Route, and a PKT departure time. A schedule row shall automatically apply to every bus assigned to its Route; operators shall not select a bus separately while defining the schedule. Route locations and direction shall be maintained separately from the Route identifier, and direction shall be one of `RETURN` or `PICK-UP`. The schedule shall be based on a recurring weekly schedule, with date-specific overrides taking precedence for the dates to which they apply. A date-specific override may specify that no service operates on that date.
-- **FR-04:** The system shall display announcements published by Transport Management and designated administrators to students and the public, including transport-related and non-transport-related notices. Announcements shall be ordered newest first. At publication, the authorized publisher shall choose either a PKT expiry date/time or that the announcement remains visible until manually removed. Published announcements may be edited; prior versions are not retained. Removed and expired records are retained for 30 days. For urgent announcements, the persistent banner follows FR-05 and FR-08 regardless of announcement expiry.
-- **FR-05:** The system shall allow Transport Management and designated administrators to identify an operational change as urgent and shall display each urgent change through a separate persistent alert banner and an announcement. Each banner shall remain visible until manually removed or resolved by an authorized user. Multiple urgent banners shall be displayed separately, newest first.
+- **FR-04:** The system shall display announcements published by Transport Management and designated administrators to students and the public, including transport-related and non-transport-related notices. An announcement has a required title and optional body. Announcements shall be ordered newest first. At publication, the authorized publisher shall choose either a PKT expiry date/time or that the announcement remains visible until manually removed. Published announcements may be edited; prior versions are not retained. Removed and expired records are retained for 30 days. Announcements do not store operational-change or confirmation state. For urgent announcements, the persistent banner follows FR-05 and FR-08 regardless of announcement expiry.
+- **FR-05:** The system shall allow Transport Management and designated administrators to mark an announcement as urgent and shall display each urgent announcement through a separate persistent alert banner and an announcement. Each banner shall remain visible until manually removed or resolved by an authorized user. Multiple urgent banners shall be displayed separately, newest first.
 - **FR-06:** The system shall allow Transport Management and designated administrators to open and save one shared permanent draft containing unique Route identifiers, separately maintained route locations and fixed `RETURN`/`PICK-UP` direction, physical Bus/Service Identifiers, Route-to-bus assignments, and Schedule / Timetable information. A schedule row contains weekday 1–7, Route, and departure time and uses all buses assigned to that Route. Saving preserves changes for every privileged account; a separate Publish action is required before the changes become visible to students.
-- **FR-07:** The system shall allow Transport Management and designated administrators to publish announcements, including operational changes and non-transport-related notices. An announcement is published through its Publish action without a separate draft-publication workflow. Either role may confirm an operational change before publication. A confirmed operational change shall be published immediately where possible and no later than 1 minute after confirmation.
+- **FR-07:** The system shall allow Transport Management and designated administrators to publish announcements, including urgent and non-transport-related notices. An announcement is published through its Publish action without a separate draft-publication workflow.
 - **FR-08:** The system shall allow Transport Management and designated administrators to remove or resolve urgent announcements manually. Removal shall hide the banner from public display without marking the change as resolved. Resolution shall mark the urgent announcement as resolved and retain that resolution state. Neither action shall occur automatically.
 - **FR-09:** The system shall allow students and the public to submit Feedback through a simple form that sends submissions to the configured Transport Management mailbox using SMTP. Name and contact details shall be optional, and anonymous submissions shall be permitted. The system shall apply a hidden honeypot field and reject normalized-content duplicates received within the preceding 10 minutes. No IP-based submission limit shall be applied. On immediate SMTP failure it shall show an error, retain the submission, and retry after 1, 5, and 30 minutes without later user notification. Feedback is retained for 30 days; a dashboard and status tracking are out of scope.
 - **FR-10:** The system shall display, for each displayed transport-data set, the timestamp of its last successful synchronization with the service. The timestamp shall represent when the data was successfully retrieved, not when cached data was displayed, the page was opened, or a refresh was attempted. It shall be displayed in PKT.
@@ -164,8 +164,8 @@ The user wants to stay up to date with daily coaster timings, routes and announc
 - **BR-01:** Transport Management owns and verifies transport data.
 - **BR-02:** Transport Management and designated administrators are the roles permitted to perform privileged functions.
 - **BR-03:** Drivers do not interact directly with the application.
-- **BR-04:** A confirmed operational change shall be published as soon as it is confirmed, without intentional delay, and no later than 1 minute after confirmation.
-- **BR-05:** Urgent operational changes must be communicated through both a persistent alert banner and an announcement. Transport Management and designated administrators may identify an operational change as urgent.
+- **BR-04:** An urgent announcement shall be published directly without a draft-publication workflow.
+- **BR-05:** Urgent announcements must be communicated through both a persistent alert banner and an announcement. Transport Management and designated administrators may mark an announcement as urgent.
 - **BR-06:** When published transport information conflicts, the latest published update takes effect, and the change is recorded.
 - **BR-07:** Publishing shall warn the publisher only when one or more configured Routes have no recurring schedule entry. The warning shall not block publication after explicit confirmation. Students shall see only the latest published version and shall not see a separate warning.
 - **BR-08:** Transport Management and designated administrators authenticate using individual accounts and passwords.
@@ -175,13 +175,13 @@ The user wants to stay up to date with daily coaster timings, routes and announc
 - **BR-12:** Cached data remains available only within the 24-hour cache-retention period and retains its original last successful synchronization timestamp. Opening, reloading, displaying, or reading cached data shall not change that timestamp or clear a stale/outage warning. While the public app is open, reconnection triggers automatic synchronization; warnings clear only after successful synchronization. If synchronization fails, cached data and its warning remain.
 - **BR-13:** The system shall create a 30-day transport-publication record for each successful transport publication, containing only its publisher and publication time. It shall not record edits, login/logout activity, announcement publication, or announcement version history. Recovery may restore only a whole previously published transport change set within 30 days; drafts and announcements are not recoverable.
 - **BR-14:** Name and contact details on the Feedback form are optional. Users may submit Feedback anonymously.
-- **BR-15:** Transport Management may publish both transport-related and non-transport-related announcements. Operational changes must be confirmed before publication.
-- **BR-16:** A confirmed operational change shall be published no later than 1 minute after confirmation.
+- **BR-15:** Transport Management may publish both transport-related and non-transport-related announcements. An announcement title is required and its body is optional.
+- **BR-16:** Announcements do not record operational-change or confirmation state.
 - **BR-17:** At least 80% of surveyed students shall report that transport information is easy to access for the product's ease-of-use improvement target.
 - **BR-18:** The Feedback form shall include a hidden honeypot field. A submission that populates the honeypot field shall be rejected. The system shall reject a submission whose normalized content (case, outer whitespace, and repeated internal whitespace) duplicates a previous submission in the preceding 10 minutes. No IP-based submission limit shall be applied.
 - **BR-19:** Release acceptance requires at least 95% of defined acceptance criteria to pass, with no critical defects.
 - **BR-20:** The daily Schedule / Timetable shall use a recurring weekly schedule as its base. A date-specific override takes precedence over the recurring schedule for that service date. A date-specific override may explicitly specify that no service operates on that date.
-- **BR-21:** Transport Management and designated administrators may determine whether an operational change is urgent and may confirm an operational change before publication.
+- **BR-21:** Transport Management and designated administrators may mark an announcement as urgent before publication.
 - **BR-22:** Each urgent change shall have its own persistent banner. Banners remain visible until manually removed or resolved by Transport Management or a designated administrator and are ordered newest first. Removal hides the banner without recording the change as resolved; resolution records that the issue has been resolved.
 - **BR-23:** Each announcement shall be configured at publication either to expire at a selected PKT date/time or to remain visible until manually removed. Announcements are ordered newest first. Published announcements may be edited without retaining previous versions; removed/expired records are retained for 30 days. An urgent banner remains governed by BR-22 even if its associated announcement reaches display expiry.
 - **BR-24:** Changes to Routes, route locations/direction, Bus/Service Identifiers, Route-to-bus assignments, and schedules are saved in one permanent shared draft and require a separate Publish action before becoming visible. Save Draft and Publish execute one request at a time and return a temporary numeric execution-order identifier. Schedule rows use weekday 1–7 and every bus assigned to the selected Route. Announcements are published directly through their Publish action.
@@ -247,13 +247,12 @@ Normal sequence:
 Successful outcome: Published announcements are displayed newest first with their configured lifetime.
 
 #### MF-05 | Linked FR: FR-05
-Trigger: An operational change needs to be identified as urgent.
+Trigger: An announcement needs to be identified as urgent.
 Actors: Transport Management, designated administrators, Student
 Normal sequence:
-1. Transport Management or a designated administrator identifies an operational change as urgent.
-2. The authorized user confirms the operational change.
-3. The system displays the urgent change through an announcement and its own persistent alert banner.
-4. The system displays multiple active urgent banners separately, newest first.
+1. Transport Management or a designated administrator marks an announcement as urgent.
+2. The system displays the urgent announcement through the announcement and its own persistent alert banner.
+3. The system displays multiple active urgent banners separately, newest first.
 5. The banner remains visible until Transport Management or a designated administrator manually removes or resolves it.
 
 Successful outcome: Each urgent change is displayed through an announcement and a separate persistent banner.
@@ -277,13 +276,11 @@ Trigger: An announcement needs to be published.
 Actors: Transport Management, designated administrators, Student
 Normal sequence:
 1. The authorized user prepares a transport-related or non-transport-related announcement.
-2. If the announcement describes an operational change, either Transport Management or a designated administrator confirms the change before publication.
-3. The authorized user selects the announcement's expiry date/time or chooses that it remains visible until manually removed.
-4. The authorized user selects Publish; announcements are published directly and do not require a separate draft-publication workflow.
-5. For a confirmed operational change, the system makes the announcement visible immediately where possible and no later than 1 minute after confirmation.
-6. The system displays the announcement newest first. If edited after publication, the latest version replaces the prior content without retaining prior versions.
+2. The authorized user enters an optional message body and selects the announcement's expiry date/time or chooses that it remains visible until manually removed.
+3. The authorized user selects Publish; announcements are published directly and do not require a separate draft-publication workflow.
+4. The system displays the announcement newest first. If edited after publication, the latest version replaces the prior content without retaining prior versions.
 
-Successful outcome: Authorized users can publish announcements directly, with the selected lifetime; confirmed operational changes are published within 1 minute.
+Successful outcome: Authorized users can publish announcements directly with the selected lifetime.
 
 #### MF-08 | Linked FR: FR-08
 Trigger: An urgent announcement needs to be removed or resolved.
@@ -291,7 +288,7 @@ Actors: Transport Management, designated administrators
 Normal sequence:
 1. An authorized user selects an active urgent announcement.
 2. The user chooses either Remove or Resolve.
-3. If Remove is selected, the system hides the banner from public display without marking the operational change as resolved.
+3. If Remove is selected, the system hides the banner from public display without marking the issue as resolved.
 4. If Resolve is selected, the system records the resolved state and stops displaying the active banner.
 
 Successful outcome: Removal and resolution have distinct recorded outcomes and are performed manually.
@@ -399,7 +396,7 @@ EC-10 | FR-04 | Situation: An announcement is published, but the relationship be
 
 EC-11 | FR-05 | Situation: An urgent change needs to be displayed to users. | Status: COVERED | Behaviour or open question: "urgent changes use a persistent alert banner plus an announcement" (D-08).
 
-EC-12 | FR-05 | Situation: An operational change must be confirmed and identified as urgent. | Status: COVERED | Behaviour: Transport Management and designated administrators may confirm operational changes and determine urgency.
+EC-12 | FR-05 | Situation: An announcement must be identified as urgent. | Status: COVERED | Behaviour: Transport Management and designated administrators may mark an announcement as urgent.
 
 EC-13 | FR-05, FR-08 | Situation: An urgent banner must be removed or resolved, or multiple urgent changes are active. | Status: COVERED | Behaviour: Each urgent change has a separate newest-first banner; manual removal hides it without resolving the issue, while manual resolution records its resolved state.
 
@@ -419,7 +416,7 @@ EC-20 | FR-03 | Situation: A date-specific override specifies no service. | Stat
 
 EC-21 | FR-05, FR-08 | Situation: Several urgent changes are active simultaneously. | Status: COVERED | Behaviour: Display a separate banner for each, newest first; each remains until manually removed or resolved.
 
-EC-22 | FR-08 | Situation: An authorized user removes an urgent banner but the operational change has not been resolved. | Status: COVERED | Behaviour: Hide the banner without marking the change resolved.
+EC-22 | FR-08 | Situation: An authorized user removes an urgent banner but the issue has not been resolved. | Status: COVERED | Behaviour: Hide the banner without marking the issue resolved.
 
 EC-23 | FR-04 | Situation: An announcement reaches its configured expiry time. | Status: COVERED | Behaviour: Stop displaying the announcement. Its audit history remains; an associated urgent banner follows its separate manual lifecycle.
 
@@ -473,7 +470,7 @@ EC-30 | FR-15, BR-25 | Situation: A user looks for official transport informatio
 ### FR-05
 - AC-FR-05-1 (verifies FR-05): Given an urgent change has been published, when a viewer accesses transport information, then the urgent change is displayed through both a persistent alert banner and an announcement (D-08).
 - AC-FR-05-2 (verifies FR-05): Given an urgent announcement is displayed, when nobody has manually removed or resolved it, then it is not removed automatically (D-12).
-- AC-FR-05-3 (verifies FR-05 and BR-21): Given either Transport Management or a designated administrator identifies and confirms an urgent operational change, when it is published, then a separate persistent banner and announcement are displayed.
+- AC-FR-05-3 (verifies FR-05 and BR-21): Given either Transport Management or a designated administrator marks an announcement as urgent, when it is published, then a separate persistent banner and announcement are displayed.
 - AC-FR-05-4 (verifies FR-05 and BR-22): Given multiple urgent changes are active, when the page is displayed, then each has a separate banner and the banners are ordered newest first.
 
 ### FR-06
@@ -484,8 +481,8 @@ EC-30 | FR-15, BR-25 | Situation: A user looks for official transport informatio
 
 ### FR-07
 - AC-FR-07-1 (verifies FR-07): Given an authorized user prepares a transport-related or non-transport-related notice, when they publish it, then the system makes the announcement available.
-- AC-FR-07-2 (verifies FR-07): Given an operational change has not been confirmed, when an authorized user attempts to publish it as a confirmed operational change, then the system does not treat it as confirmed.
-- AC-FR-07-3 (verifies FR-07 and BR-16): Given an operational change is confirmed, when its announcement is published, then it becomes visible no later than 1 minute after the confirmation time.
+- AC-FR-07-2 (verifies FR-07 and BR-15): Given an authorized user publishes an announcement with only a title, when publication succeeds, then the public response contains an empty body.
+- AC-FR-07-3 (verifies FR-07 and BR-16): Given an announcement is published, when its persisted record and public response are inspected, then neither contains operational-change or confirmation state.
 - AC-FR-07-4 (verifies FR-07): Given an unauthorized user, when they attempt to publish an announcement, then the system does not allow it (D-20).
 
 ### FR-08
@@ -558,11 +555,11 @@ EC-30 | FR-15, BR-25 | Situation: A user looks for official transport informatio
 - AC-BR-07-3 (verifies BR-07): Given conflicting schedule information has been published, when students view the schedule, then only the latest published version is displayed and no separate conflict warning is shown.
 - AC-BR-13-1 (verifies BR-13): Given an authorized user successfully saves an administrative edit, when the change is committed, then an audit record identifies that user.
 - AC-BR-13-2 (verifies BR-13): Given an authorized user successfully publishes transport information, when publication completes, then an audit record identifies that user.
-- AC-BR-16-1 (verifies BR-16): Given an operational change is confirmed, when its announcement becomes visible, then no more than 1 minute has elapsed since confirmation. A result exceeding 1 minute fails this criterion.
+- AC-BR-16-1 (verifies BR-16): Given an announcement is published, when its persisted record is inspected, then it has no operational-change or confirmation field.
 - AC-BR-17-1 (verifies BR-17): Given the student experience survey is conducted, when responses are evaluated, then at least 80% of surveyed students report that transport information is easy to access.
 - AC-BR-20-1 (verifies BR-20): Given a recurring weekly schedule exists and no date-specific override applies, when a service date is displayed, then the recurring schedule is used.
 - AC-BR-20-2 (verifies BR-20): Given a date-specific override exists, when its service date is displayed, then the override takes precedence over the recurring schedule.
-- AC-BR-21-1 (verifies BR-21): Given an authorized Transport Management user or designated administrator confirms an operational change, when it is identified as urgent, then either role is permitted to make that determination and confirmation.
+- AC-BR-21-1 (verifies BR-21): Given an authorized Transport Management user or designated administrator marks an announcement as urgent, when it is published, then either role is permitted to make that determination.
 - AC-BR-22-1 (verifies BR-22): Given multiple urgent changes are active, when banners are displayed, then each appears separately and newest first.
 - AC-BR-22-2 (verifies BR-22): Given an active urgent banner, when an authorized user removes it, then it is hidden but not marked resolved.
 - AC-BR-22-3 (verifies BR-22): Given an active urgent banner, when an authorized user resolves it, then its resolved state is recorded and the active banner is no longer displayed.
@@ -611,9 +608,9 @@ EC-30 | FR-15, BR-25 | Situation: A user looks for official transport informatio
 - **OQ-04:** RESOLVED. Record successful administrative edits and successful publication events, identifying the responsible individual account. Warning-only events and failed publication attempts are not required audit events for this release. [Related: FR-14b, BR-13]
 - **OQ-05:** RESOLVED. After a successful Feedback submission, display a simple on-screen success confirmation. A unique submission/reference number is not required. [Related: FR-09]
 - **OQ-06:** RESOLVED. Name and contact details are optional. Users may submit Feedback anonymously. [Related: FR-09, BR-14]
-- **OQ-07:** RESOLVED. The first release supports all announcements published by Transport Management or designated administrators, including transport-related and non-transport-related notices. Operational changes must be confirmed before publication. [Related: FR-04, FR-07, BR-15]
+- **OQ-07:** RESOLVED. The first release supports all announcements published by Transport Management or designated administrators, including transport-related and non-transport-related notices. Announcement bodies are optional and operational-change state is not stored. [Related: FR-04, FR-07, BR-15, BR-16]
 - **OQ-08:** RESOLVED. At least 80% of surveyed students shall report that transport information is easy to access. [Related: UG-01, G-01, BR-17]
-- **OQ-09:** RESOLVED. A confirmed operational change must be published no later than 1 minute after confirmation. [Related: FR-07, BR-04, BR-16]
+- **OQ-09:** RESOLVED. Announcements publish directly and do not have an operational-change confirmation step. [Related: FR-07, BR-04, BR-16]
 - **OQ-10:** RESOLVED. Adopt RTO of no more than 4 hours and RPO of no more than 1 hour. [Related: NFR-04]
 - **OQ-11:** RESOLVED. Use a baseline performance-test scale of 500 concurrent users and 2,000 scheduled departures. The remaining performance-test details are resolved under OQ-03. [Related: NFR-01]
 - **OQ-12:** RESOLVED. A recovery test passes when recovery time is no more than 4 hours and data loss is no more than 1 hour. [Related: NFR-04]
@@ -622,7 +619,7 @@ EC-30 | FR-15, BR-25 | Situation: A user looks for official transport informatio
 - **OQ-15:** RESOLVED. Route is a unique identifier; route locations and direction (`RETURN` or `PICK-UP`) are maintained separately. Bus/Service Identifier identifies an individual physical coaster. A Route-to-bus assignment associates that physical coaster with a Route, and each schedule row automatically applies to every assigned bus. [Related: FR-02, FR-03, FR-06]
 - **OQ-16:** RESOLVED. “Current departure” means the next-upcoming departure instance selected independently for each Route and Bus/Service Identifier for the current service date in PKT. It is identified by service date, scheduled departure date/time, Route, and Bus/Service Identifier. After the final departure for a grouping, show “No further departures today”. This is schedule-based, not GPS/live tracking. [Related: FR-02]
 - **OQ-17:** RESOLVED. The Schedule / Timetable uses a recurring weekly schedule as its base. A date-specific override takes precedence for the date it covers and may specify a no-service day. Future dates use the recurring weekly schedule unless an override exists. [Related: FR-03, BR-20]
-- **OQ-18:** RESOLVED. Both Transport Management and designated administrators may identify an operational change as urgent and confirm an operational change before publication. [Related: FR-05, FR-07, BR-05, BR-21]
+- **OQ-18:** RESOLVED. Both Transport Management and designated administrators may mark an announcement as urgent before publication. [Related: FR-05, BR-05, BR-21]
 - **OQ-19:** RESOLVED. Each urgent change has a separate banner. Banners remain until manually removed or resolved by Transport Management or a designated administrator and are ordered newest first. Removal hides the banner without marking the change resolved; resolution records the resolved state. [Related: FR-05, FR-08, BR-05, BR-22]
 - **OQ-20:** RESOLVED. At publication, the authorized user chooses a PKT expiry date/time or that the announcement remains visible until manually removed. Announcements are ordered newest first. Published announcements may be edited without retaining prior versions; an urgent banner remains governed by its separate manual-removal/resolution rule. [Related: FR-04, FR-07, FR-14b, BR-23]
 - **OQ-21:** RESOLVED. Route, Bus/Service Identifier, assignment, and Schedule / Timetable changes are saved as drafts and require a separate Publish action. Announcements are published directly through their Publish action without a separate draft-publication workflow. [Related: FR-06, FR-07, FR-14a, BR-24]

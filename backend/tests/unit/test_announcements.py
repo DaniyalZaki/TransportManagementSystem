@@ -1,12 +1,9 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
 from src.application.authorization.roles import Principal, Role
 from src.modules.announcement.application.services import (
     AnnouncementService,
-    InvalidAnnouncement,
 )
 from src.modules.announcement.domain.models import Announcement
 
@@ -55,23 +52,20 @@ def service(repository, cache=None):
 def test_routine_announcements_publish_directly_and_are_newest_first():
     repository = MemoryAnnouncements()
     app = service(repository)
-    first = asyncio.run(app.publish("First", "Routine notice", None, False, False, None, manager())).announcement
+    first = asyncio.run(app.publish("First", "Routine notice", None, False, manager())).announcement
     repository.announcements[first.id] = Announcement(
         first.id, first.title, first.content, first.published_at - timedelta(minutes=1), first.expires_at,
-        first.is_operational, first.confirmed_at, first.removed_at, first.updated_at,
+        first.removed_at, first.updated_at,
     )
-    second = asyncio.run(app.publish("Second", "Newer notice", None, False, False, None, manager())).announcement
+    second = asyncio.run(app.publish("Second", "Newer notice", None, False, manager())).announcement
 
     assert [item.id for item in asyncio.run(app.public_announcements())] == [second.id, first.id]
 
 
-def test_operational_notice_requires_confirmation_and_urgent_creates_a_separate_banner():
+def test_urgent_announcement_creates_a_separate_banner_without_operational_state():
     repository = MemoryAnnouncements()
     app = service(repository)
-    with pytest.raises(InvalidAnnouncement, match="confirmed"):
-        asyncio.run(app.publish("Diversion", "Route moved", None, False, True, None, manager()))
-
-    outcome = asyncio.run(app.publish("Diversion", "Route moved", None, True, True, datetime(2026, 11, 22, 8, 59, tzinfo=UTC), manager()))
+    outcome = asyncio.run(app.publish("Diversion", "Route moved", None, True, manager()))
 
     assert outcome.banner is not None
     assert outcome.banner.announcement_id == outcome.announcement.id
@@ -81,11 +75,10 @@ def test_operational_notice_requires_confirmation_and_urgent_creates_a_separate_
 def test_expiry_hides_announcement_but_does_not_hide_its_banner():
     repository = MemoryAnnouncements()
     app = service(repository)
-    outcome = asyncio.run(app.publish("Closure", "Use gate B", datetime(2026, 11, 22, 10, tzinfo=UTC), True, True, datetime(2026, 11, 22, 7, tzinfo=UTC), manager()))
+    outcome = asyncio.run(app.publish("Closure", "Use gate B", datetime(2026, 11, 22, 10, tzinfo=UTC), True, manager()))
     repository.announcements[outcome.announcement.id] = Announcement(
         outcome.announcement.id, outcome.announcement.title, outcome.announcement.content,
         outcome.announcement.published_at, datetime(2026, 11, 22, 8, tzinfo=UTC),
-        outcome.announcement.is_operational, outcome.announcement.confirmed_at,
         outcome.announcement.removed_at, outcome.announcement.updated_at,
     )
 
@@ -96,7 +89,7 @@ def test_expiry_hides_announcement_but_does_not_hide_its_banner():
 def test_remove_only_hides_banner_while_resolve_records_resolution():
     repository = MemoryAnnouncements()
     app = service(repository)
-    outcome = asyncio.run(app.publish("Closure", "Use gate B", None, True, True, datetime(2026, 11, 22, 8, tzinfo=UTC), manager()))
+    outcome = asyncio.run(app.publish("Closure", "Use gate B", None, True, manager()))
 
     removed = asyncio.run(app.remove_banner(outcome.banner.id, manager()))
     assert removed.removed_at is not None and removed.resolved_at is None
@@ -108,7 +101,7 @@ def test_remove_only_hides_banner_while_resolve_records_resolution():
 def test_announcement_edit_replaces_content_without_creating_a_version():
     repository = MemoryAnnouncements()
     app = service(repository)
-    created = asyncio.run(app.publish("Title", "Original", None, False, False, None, manager())).announcement
+    created = asyncio.run(app.publish("Title", "Original", None, False, manager())).announcement
     edited = asyncio.run(app.edit(created.id, "Updated", "Replacement", None, manager()))
 
     assert edited.id == created.id
@@ -119,7 +112,7 @@ def test_announcement_edit_replaces_content_without_creating_a_version():
 def test_manual_removal_hides_an_announcement_without_touching_its_banner():
     repository = MemoryAnnouncements()
     app = service(repository)
-    outcome = asyncio.run(app.publish("Closure", "Use gate B", None, True, True, datetime(2026, 11, 22, 8, tzinfo=UTC), manager()))
+    outcome = asyncio.run(app.publish("Closure", "Use gate B", None, True, manager()))
 
     asyncio.run(app.remove_announcement(outcome.announcement.id, manager()))
 
@@ -131,15 +124,15 @@ def test_naive_expiry_is_interpreted_as_pakistan_standard_time():
     repository = MemoryAnnouncements()
     app = service(repository)
 
-    announcement = asyncio.run(app.publish("Notice", "PKT expiry", datetime(2026, 11, 22, 16), False, False, None, manager())).announcement
+    announcement = asyncio.run(app.publish("Notice", "PKT expiry", datetime(2026, 11, 22, 16), False, manager())).announcement
 
     assert announcement.expires_at is not None
     assert announcement.expires_at.utcoffset().total_seconds() == 18_000
 
 
-def test_operational_confirmation_cannot_be_in_the_future():
-    with pytest.raises(InvalidAnnouncement, match="future"):
-        asyncio.run(service(MemoryAnnouncements()).publish(
-            "Diversion", "Route moved", None, False, True,
-            datetime(2026, 11, 22, 10, tzinfo=UTC), manager(),
-        ))
+def test_announcement_message_can_be_empty():
+    announcement = asyncio.run(
+        service(MemoryAnnouncements()).publish("Short notice", "", None, False, manager())
+    ).announcement
+
+    assert announcement.content == ""

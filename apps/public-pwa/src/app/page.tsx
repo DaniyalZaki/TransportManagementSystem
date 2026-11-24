@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Announcement, type CurrentDeparture, type CurrentDeparturesResponse, type PublicSnapshot, type ScheduleResponse, type UrgentBanner, cacheIsUsable, isStale, readSnapshot, synchronize } from "../lib/public-data";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const MANUAL_REFRESH_COOLDOWN_MS = 5_000;
 type Availability = "loading" | "fresh" | "offline" | "outage" | "unavailable";
 function formatTime(instant: string): string { return new Intl.DateTimeFormat("en-PK", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Karachi" }).format(new Date(instant)); }
 function formatDate(serviceDate: string): string { return new Intl.DateTimeFormat("en-PK", { weekday: "long", day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Karachi" }).format(new Date(`${serviceDate}T00:00:00+05:00`)); }
@@ -18,7 +19,9 @@ export default function PublicHome() {
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [isSendingFeedback, setSendingFeedback] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isRefreshCoolingDown, setIsRefreshCoolingDown] = useState(false);
   const snapshotRef = useRef<PublicSnapshot | null>(null);
+  const refreshCooldownTimer = useRef<number | null>(null);
 
   const refresh = useCallback(async (fallback = snapshotRef.current) => {
     setIsRefreshing(true);
@@ -37,7 +40,18 @@ export default function PublicHome() {
     finally { setIsRefreshing(false); }
   }, []);
 
+  const manualRefresh = useCallback(() => {
+    if (isRefreshing || isRefreshCoolingDown) return;
+    setIsRefreshCoolingDown(true);
+    refreshCooldownTimer.current = window.setTimeout(() => {
+      setIsRefreshCoolingDown(false);
+      refreshCooldownTimer.current = null;
+    }, MANUAL_REFRESH_COOLDOWN_MS);
+    void refresh();
+  }, [isRefreshing, isRefreshCoolingDown, refresh]);
+
   useEffect(() => { if ("serviceWorker" in navigator) void navigator.serviceWorker.register("/sw.js").catch(() => undefined); }, []);
+  useEffect(() => () => { if (refreshCooldownTimer.current !== null) window.clearTimeout(refreshCooldownTimer.current); }, []);
   useEffect(() => { let mounted = true; void readSnapshot().catch(() => null).then((saved) => { if (!mounted) return; const cached = saved && cacheIsUsable(saved) ? saved : null; snapshotRef.current = cached; setSnapshot(cached); if (!navigator.onLine) { setAvailability(cached ? "offline" : "unavailable"); return; } void refresh(cached); }); return () => { mounted = false; }; }, [refresh]);
   useEffect(() => { const onOffline = () => { const cached = snapshotRef.current; setBanners([]); setAvailability(cached && cacheIsUsable(cached) ? "offline" : "unavailable"); }; const onOnline = () => void refresh(); window.addEventListener("offline", onOffline); window.addEventListener("online", onOnline); window.onoffline = onOffline; window.ononline = onOnline; const interval = window.setInterval(() => void refresh(), 60_000); return () => { window.removeEventListener("offline", onOffline); window.removeEventListener("online", onOnline); if (window.onoffline === onOffline) window.onoffline = null; if (window.ononline === onOnline) window.ononline = null; window.clearInterval(interval); }; }, [refresh]);
 
@@ -48,7 +62,7 @@ export default function PublicHome() {
   async function submitFeedback(form: HTMLFormElement) { const data = new FormData(form); setFeedbackMessage(null); setFeedbackError(null); setSendingFeedback(true); try { const response = await fetch(`${apiBaseUrl}/api/v1/public/feedback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: data.get("content"), name: data.get("name") || null, contact: data.get("contact") || null, honeypot: data.get("honeypot") || "" }) }); const body = await response.json() as { message?: string }; if (!response.ok) throw new Error(body.message ?? "Feedback could not be delivered now. Please try again later."); setFeedbackMessage(body.message ?? "Feedback received. Thank you."); form.reset(); } catch (error) { setFeedbackError(error instanceof Error ? error.message : "Feedback could not be delivered now. Please try again later."); } finally { setSendingFeedback(false); } }
 
   return <main className="public-shell">
-    <header className="public-header"><div className="header-actions"><div><p className="public-eyebrow">Official transport information</p><h1>Uzair Transport Service</h1></div><button type="button" className="refresh-button" onClick={() => void refresh()} disabled={isRefreshing} aria-busy={isRefreshing}>{isRefreshing ? "Refreshing…" : "Refresh"}</button></div><p>Published transport information for the university community, shown in Pakistan Standard Time.</p></header>
+    <header className="public-header"><div className="header-actions"><div><p className="public-eyebrow">Official transport information</p><h1>Uzair Transport Service</h1></div><button type="button" className="refresh-button" onClick={manualRefresh} disabled={isRefreshing || isRefreshCoolingDown} aria-busy={isRefreshing}>{isRefreshing ? "Refreshing…" : "Refresh"}</button></div><p>Published transport information for the university community, shown in Pakistan Standard Time.</p></header>
     {snapshot ? <p className="sync-time">Last synced: <time dateTime={snapshot.lastSuccessfulSync}>{formatSync(snapshot.lastSuccessfulSync)} PKT</time></p> : null}
     {availability === "offline" ? <section aria-live="polite" className="public-notice"><h2>Offline</h2><p>Showing previously synchronized transport information.</p></section> : null}
     {availability === "outage" ? <section aria-live="polite" className="public-notice"><h2>Service/data outage</h2><p>Showing the last successfully synchronized transport information.</p></section> : null}

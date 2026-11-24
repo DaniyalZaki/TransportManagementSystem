@@ -94,4 +94,4 @@ Published urgent item
 └──────────────────────────────────────┘
 ```
 
-The UI makes clear that removal is not resolution. An urgent operational change requires both a published announcement and a separate banner.
+The UI makes clear that removal is not resolution. An urgent announcement requires both a published announcement and a separate banner; the form has no operational-change or confirmation control.

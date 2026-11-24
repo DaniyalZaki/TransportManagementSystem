@@ -40,6 +40,17 @@ def test_announcement_routes_document_public_reads_and_privileged_lifecycle():
     assert "/api/v1/admin/announcements/{announcement_id}/remove" in paths
     assert "/api/v1/admin/urgent-banners/{banner_id}/remove" in paths
     assert "/api/v1/admin/urgent-banners/{banner_id}/resolve" in paths
+    properties = paths["/api/v1/admin/announcements"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+    assert properties["$ref"] == "#/components/schemas/PublishAnnouncementRequest"
+    schema = create_app().openapi()["components"]["schemas"]["PublishAnnouncementRequest"]
+    assert "operational" not in schema["properties"]
+    assert "confirmed_at" not in schema["properties"]
+
+
+def test_announcement_request_allows_an_omitted_message():
+    request = PublishAnnouncementRequest(title="Title only")
+
+    assert request.content == ""
 
 
 def test_public_announcement_response_never_exposes_removed_or_expired_records():

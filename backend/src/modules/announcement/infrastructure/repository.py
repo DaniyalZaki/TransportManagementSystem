@@ -10,8 +10,8 @@ class PostgresAnnouncementRepository:
 
     async def publish(self, item: Announcement) -> Announcement:
         async with open_connection(self._database_url) as connection:
-            await connection.execute("""INSERT INTO announcements (id, title, content, published_at, expires_at, is_operational, confirmed_at, updated_at)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)""", item.id, item.title, item.content, item.published_at, item.expires_at, item.is_operational, item.confirmed_at, item.updated_at)
+            await connection.execute("""INSERT INTO announcements (id, title, content, published_at, expires_at, updated_at)
+                VALUES ($1,$2,$3,$4,$5,$6)""", item.id, item.title, item.content, item.published_at, item.expires_at, item.updated_at)
         return item
 
     async def update(self, item: Announcement) -> Announcement:
@@ -60,7 +60,7 @@ class PostgresAnnouncementRepository:
 
 
 def _announcement(row) -> Announcement:
-    return Announcement(row["id"], row["title"], row["content"], row["published_at"], row["expires_at"], row["is_operational"], row["confirmed_at"], row["removed_at"], row["updated_at"])
+    return Announcement(row["id"], row["title"], row["content"], row["published_at"], row["expires_at"], row["removed_at"], row["updated_at"])
 
 
 def _banner(row) -> UrgentBanner:

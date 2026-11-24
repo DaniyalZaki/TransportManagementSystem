@@ -69,14 +69,18 @@ physically deleted after 30 days; the working draft is never expired or deleted.
 |---|---|
 | `POST/PATCH /admin/announcements[/{id}]` | Directly publish/edit announcement; `expires_at_pkt` is supplied or null for manual removal. No version history. |
 | `POST /admin/announcements/{id}/remove` | Hide announcement. |
-| `POST /admin/announcements/{id}/confirm-operational-change` | Confirm operational change before publication. |
 | `POST /admin/urgent-banners` | Create separate persistent banner linked to urgent announcement. |
 | `POST /admin/urgent-banners/{id}/remove` | Hide banner without resolving it. |
 | `POST /admin/urgent-banners/{id}/resolve` | Mark banner resolved and stop public display. |
 | `GET /admin/me` | Return current privileged user and backend-mapped role. |
 | `GET/POST /admin/accounts`, `PATCH /admin/accounts/{supabase_user_id}` | Transport Management only: role mappings/activation. |
 
-An urgent operational change is both an announcement and independent banner. The banner remains active if its announcement expires, until an authorized user removes or resolves it. Deactivation blocks new login but does not revoke an otherwise valid active token.
+An urgent announcement is both an announcement and an independent banner. The
+request has no operational-change or confirmation state, and the service does
+not store either. `content` is optional and defaults to an empty string. The
+banner remains active if its announcement expires, until an authorized user
+removes or resolves it. Deactivation blocks new login but does not revoke an
+otherwise valid active token.
 
 ## Error envelope
 

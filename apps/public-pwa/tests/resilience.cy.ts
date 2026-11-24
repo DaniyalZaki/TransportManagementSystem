@@ -66,6 +66,17 @@ describe("public PWA resilience", () => {
     cy.findByRole("button", { name: /^refresh$/i }).click();
     cy.findByRole("button", { name: /refreshing/i }).should("be.disabled").and("have.attr", "aria-busy", "true");
     cy.wait("@slowRefresh");
+    cy.findByRole("button", { name: /^refresh$/i }).should("be.disabled");
+  });
+
+  it("enforces a five-second cooldown after a manual refresh", () => {
+    cy.clock(new Date("2026-11-23T08:00:00Z"), ["Date", "setTimeout", "clearTimeout"]);
+    interceptPublished(); cy.visit("/"); cy.wait(["@current", "@schedule", "@announcements"]);
+    cy.findByRole("button", { name: /^refresh$/i }).click();
+    cy.findByRole("button", { name: /^refresh$/i }).should("be.disabled");
+    cy.tick(4_999);
+    cy.findByRole("button", { name: /^refresh$/i }).should("be.disabled");
+    cy.tick(1);
     cy.findByRole("button", { name: /^refresh$/i }).should("be.enabled");
   });
 

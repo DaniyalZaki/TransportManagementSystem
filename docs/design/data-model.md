@@ -47,7 +47,7 @@ An incomplete entry is saveable but warned at publish when it lacks weekday, tim
 
 `transport_publications`: `id`, `published_change_set_id`, `publisher_supabase_user_id`, `published_at`, `expires_at`. It deliberately excludes edits, login/logout, announcements, and announcement version history. Recovery creates a new change set from an eligible whole published snapshot.
 
-`announcements`: `id`, `title`, `body`, `category`, `is_operational_change`, `confirmed_at`, `published_by`, `published_at`, `expires_at`, `removed_at`, `retention_delete_at`, `updated_at`; no version table. `urgent_banners`: `id`, `announcement_id`, `message`, `created_by`, `created_at`, `removed_at`, `resolved_at`, `resolved_by`. Publicly active requires both end fields null; announcement expiry never changes this.
+`announcements`: `id`, `title`, optional `body`, `published_at`, `expires_at`, `removed_at`, and `updated_at`; no version table. It stores no operational-change or confirmation state. `urgent_banners`: `id`, `announcement_id`, `message`, `created_at`, `removed_at`, and `resolved_at`. Publicly active requires both end fields null; announcement expiry never changes this.
 
 `feedback_submissions`: `id`, optional `name`/`contact`, `content`, `normalized_content`, `received_at`, `delivery_state` (`pending`, `delivered`, `retry_pending`, `exhausted`), `next_retry_at`, `expires_at`. `feedback_delivery_attempts`: `id`, `feedback_id`, `attempt_number`, `attempted_at`, `outcome`, `failure_reason`. Index `(normalized_content, received_at DESC)` supports 10-minute duplicate checks; index `(delivery_state, next_retry_at)` supports retry. No IP or status-tracking field exists.
 
