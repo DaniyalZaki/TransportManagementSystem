@@ -257,6 +257,88 @@ The backend runs on `http://localhost:8000`, the public PWA on
 `http://localhost:3000`, and the admin application on `http://localhost:3001`.
 Check that the API is ready at `http://localhost:8000/health`.
 
+## Clean local restart and validation
+
+Use this sequence when a backend dependency was added, an API endpoint is
+returning `500`, Docker services were stopped, or a previous Next.js process
+left generated output locked. It preserves the named local Docker volume and
+does not delete database data.
+
+Run every command from the repository root in PowerShell. The commands stop
+only processes listening on this project's local ports: backend `8000`, Public
+PWA `3000`, and Admin Web App `3001`.
+
+```powershell
+# 1. Stop the three local application processes, if present.
+$utsPorts = 8000, 3000, 3001
+Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+  Where-Object { $_.LocalPort -in $utsPorts } |
+  Select-Object -ExpandProperty OwningProcess -Unique |
+  ForEach-Object { Stop-Process -Id $_ -Force }
+
+# 2. Recreate the local PostgreSQL and Supabase Auth containers without
+#    removing the postgres-data volume.
+docker compose --env-file infra/local/.env -f infra/local/compose.yaml down
+docker compose --env-file infra/local/.env -f infra/local/compose.yaml up -d
+docker compose --env-file infra/local/.env -f infra/local/compose.yaml ps
+
+# 3. Install the backend, including PostgreSQL support, in the exact virtual
+#    environment that starts the application. This repository's local venv
+#    was created with MSYS2 Python, so it uses bin rather than Scripts.
+.\.venv\bin\python.exe -m pip install -e "backend[postgres,dev]" "uvicorn>=0.30,<1.0"
+.\.venv\bin\python.exe -c "import asyncpg; print(asyncpg.__version__)"
+
+# 4. Load local backend settings and run idempotent handwritten migrations.
+Get-Content .env | ForEach-Object {
+  if ($_ -match '^\s*([^#=]+)=(.*)$') {
+    Set-Item -Path "Env:$($matches[1].Trim())" -Value $matches[2].Trim()
+  }
+}
+.\.venv\bin\python.exe backend/src/infrastructure/database/migrate.py $env:UTS_DATABASE_URL
+```
+
+Start each application in its own PowerShell window. Load the `.env` values in
+the backend window before starting the server.
+
+```powershell
+# Window 1 - backend
+Set-Location <repository-root>
+Get-Content .env | ForEach-Object {
+  if ($_ -match '^\s*([^#=]+)=(.*)$') {
+    Set-Item -Path "Env:$($matches[1].Trim())" -Value $matches[2].Trim()
+  }
+}
+.\.venv\bin\python.exe backend/run_server.py
+
+# Window 2 - Public PWA
+Set-Location <repository-root>
+npm run dev --workspace @uzair/public-pwa
+
+# Window 3 - Admin Web App
+Set-Location <repository-root>
+npm run dev --workspace @uzair/admin-web
+```
+
+Validate the live stack after the three processes report ready:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing http://localhost:8000/health
+Invoke-WebRequest -UseBasicParsing http://localhost:8000/api/v1/public/transport/current-departures
+Invoke-WebRequest -UseBasicParsing http://localhost:8000/api/v1/public/transport/schedule
+Invoke-WebRequest -UseBasicParsing http://localhost:8000/api/v1/public/announcements
+Invoke-WebRequest -UseBasicParsing http://localhost:3000/
+Invoke-WebRequest -UseBasicParsing http://localhost:3001/
+```
+
+The public transport reads return `200` only after a published transport
+change set exists. A `503` in an empty local database means no published data
+is available; a `500` means the backend must be investigated. Confirm Docker
+logs if Supabase Auth does not start:
+
+```powershell
+docker compose --env-file infra/local/.env -f infra/local/compose.yaml logs --tail 100 postgres supabase-auth
+```
+
 ## Run tests and checks
 
 ```powershell
@@ -269,14 +351,18 @@ python -m flake8 src tests
 # Client checks (repository root)
 npm run typecheck
 npm run lint
+# Use an alternate generated-output directory when active dev servers or
+# OneDrive reparse points make the default .next directory unreadable.
+$env:NEXT_DIST_DIR = ".next-verify"
 npm run build
+Remove-Item Env:NEXT_DIST_DIR
 
 # Browser tests — start the relevant client first
 npm run test:e2e
 ```
 
-Slice 0 and Slice 1 test coverage is implemented. Planned and executed acceptance
-evidence is maintained in [docs/design/test-cases.md](docs/design/test-cases.md).
+Test cases, slice ownership, release commands, current evidence, and deferred
+deployment checks are maintained in [docs/design/test-cases.md](docs/design/test-cases.md).
 
 ## Important documentation
 

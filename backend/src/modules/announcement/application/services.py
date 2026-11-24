@@ -24,22 +24,16 @@ class AnnouncementService:
     def __init__(self, repository: AnnouncementRepository, cache: AnnouncementCache, clock=lambda: datetime.now(UTC)) -> None:
         self._repository, self._cache, self._clock = repository, cache, clock
 
-    async def publish(self, title: str, content: str, expires_at: datetime | None, urgent: bool, operational: bool, confirmed_at: datetime | None, principal: Principal | None = None) -> PublishedAnnouncement:
+    async def publish(self, title: str, content: str, expires_at: datetime | None, urgent: bool, principal: Principal | None = None) -> PublishedAnnouncement:
         self._require_privileged(principal)
         now = self._clock()
         if expires_at is not None and expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=ZoneInfo("Asia/Karachi"))
         title, content = self._valid_text(title, content)
-        if operational and confirmed_at is None:
-            raise InvalidAnnouncement("Operational changes must be confirmed before publication")
-        if confirmed_at is not None and confirmed_at > now:
-            raise InvalidAnnouncement("Operational changes cannot be confirmed in the future")
-        if urgent and not operational:
-            raise InvalidAnnouncement("Urgent announcements must describe an operational change")
         if expires_at is not None and expires_at <= now:
             # Past expiries are allowed for lifecycle correctness only in tests/imports; direct publications must be live.
             raise InvalidAnnouncement("Announcement expiry must be in the future")
-        announcement = await self._repository.publish(Announcement(uuid4(), title, content, now, expires_at, operational, confirmed_at, None, now))
+        announcement = await self._repository.publish(Announcement(uuid4(), title, content, now, expires_at, None, now))
         banner = None
         if urgent:
             banner = await self._repository.add_banner(UrgentBanner(uuid4(), announcement.id, title, content, now))
@@ -107,7 +101,8 @@ class AnnouncementService:
 
     @staticmethod
     def _valid_text(title: str, content: str) -> tuple[str, str]:
-        if not title.strip() or not content.strip(): raise InvalidAnnouncement("Title and content are required")
+        if not title.strip():
+            raise InvalidAnnouncement("Title is required")
         return title.strip(), content.strip()
 
     @staticmethod

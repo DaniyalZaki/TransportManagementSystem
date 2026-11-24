@@ -10,8 +10,6 @@ class Announcement:
     content: str
     published_at: datetime
     expires_at: datetime | None
-    is_operational: bool
-    confirmed_at: datetime | None
     removed_at: datetime | None
     updated_at: datetime
 
