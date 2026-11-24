@@ -39,9 +39,10 @@ describe("published transport information", () => {
         },
       ],
     }).as("schedule");
+    cy.intercept("GET", "**/api/v1/public/announcements", { announcements: [] }).as("announcements");
 
     cy.visit("/");
-    cy.wait(["@currentDepartures", "@schedule"]);
+    cy.wait(["@currentDepartures", "@schedule", "@announcements"]);
 
     cy.findByRole("heading", { name: /next departures/i }).should("be.visible");
     cy.contains("R-01").should("be.visible");

@@ -171,6 +171,19 @@ def current_departures(
     now_pkt = now.astimezone(PKT)
     scheduled = daily_schedule(snapshot, service_date)
     routes = {route.route_code: route for route in snapshot.routes}
+    # Index the earliest remaining instance once.  The former implementation
+    # scanned every scheduled entry for every assignment, which becomes
+    # quadratic for the S6 2,000-departure workload.  A public read must stay
+    # linear in its resolved schedule and assignment counts.
+    next_by_assignment: dict[tuple[str, str], ScheduledDeparture] = {}
+    for entry in scheduled:
+        if entry.scheduled_departure_at < now_pkt:
+            continue
+        for bus_identifier in entry.bus_identifiers:
+            key = (entry.route.route_code, bus_identifier)
+            # `daily_schedule` is time ordered, so the first entry is next.
+            next_by_assignment.setdefault(key, entry)
+
     results: list[CurrentDeparture] = []
     for assignment in sorted(
         snapshot.assignments, key=lambda item: (item.route_code, item.bus_identifier)
@@ -178,15 +191,8 @@ def current_departures(
         route = routes.get(assignment.route_code)
         if route is None:
             continue
-        next_entry = next(
-            (
-                entry
-                for entry in scheduled
-                if entry.route.route_code == assignment.route_code
-                and assignment.bus_identifier in entry.bus_identifiers
-                and entry.scheduled_departure_at >= now_pkt
-            ),
-            None,
+        next_entry = next_by_assignment.get(
+            (assignment.route_code, assignment.bus_identifier)
         )
         results.append(
             CurrentDeparture(

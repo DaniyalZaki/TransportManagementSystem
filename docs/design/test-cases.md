@@ -66,6 +66,14 @@ Use Pytest for domain/repository/API integration; Cypress for public/admin workf
 | PW-17 | Cypress | Application remains open for one minute | Perform a synchronization attempt every 60 seconds; failure must not advance the persisted timestamp or clear a warning. |
 | PW-18 | Cypress | Service-worker cache policy | A Workbox service worker caches only public published transport and announcement API reads for at most 24 hours; it never caches `/public/urgent-banners`, privileged routes, or draft data. |
 | UX-01 | Cypress/a11y | Mobile/keyboard/semantic check | Core workflows usable and accessible. |
+| RV-01 | API contract | Release OpenAPI surface | All public reads and feedback remain unauthenticated; privileged transport, announcement, and account mutation paths remain protected by backend dependencies. |
+| RV-02 | Unit | Approved server runtime profile | The executable backend launcher starts exactly one Uvicorn worker with `limit_concurrency=500`; neither setting is documentation-only. |
+| RV-03 | Unit/performance guard | Baseline data shape: 2,000 derived scheduled departures and 500 simultaneous public readers | Every reader receives all 2,000 Route–Bus current-departure results within five seconds in the deterministic service-level guard. This detects algorithmic regressions; it is not the required deployed publish-to-visible measurement. |
+| RV-04 | Deployment benchmark | 500 concurrent users and 2,000 scheduled departures | In the selected deployment, measure publish receipt to a subsequent public schedule/current-departure read. At least 95% of measurements complete within five seconds. Record environment, command, raw timings, p95, and result. |
+| RV-05 | Integration/timing | Confirmed urgent operational publication | From confirmed timestamp to unauthenticated public announcement/banner visibility is at most one minute; record the observed elapsed time. |
+| RV-06 | Deployment load | Uvicorn at exactly 500 and above 500 held concurrent connections | The single-worker process accepts work through the approved cap and requests above it receive Uvicorn's overload response without process failure; record command and status distribution. |
+| RV-07 | Review | Acceptance-criteria traceability | Evaluate every applicable PRD acceptance criterion against automated/manual evidence; release passes only with at least 95% passing and no critical defect. ADR-011/012/013 supersede conflicting older PRD/ADR clauses. |
+| RV-08 | Deferred HITL | Production restore drill | After human selection of production hosting, backup, and recovery configuration, run and record recovery evidence showing RTO <= 4 hours and RPO <= 1 hour. This case is intentionally not runnable locally. |
 
 ## S1 verification record
 
@@ -107,6 +115,20 @@ verification alongside the required performance benchmark.
 | PW-03, PW-12 | `apps/public-pwa/tests/resilience.cy.ts` | Passed — offline state keeps the published snapshot and removes online-only urgent banners, 2026-11-23. |
 | PW-06, PW-14 | `apps/public-pwa/tests/resilience.cy.ts` | Passed — exactly five minutes remains fresh and a snapshot is expired at exactly 24 hours, 2026-11-23. |
 | PW-18 | `apps/public-pwa/public/sw.js`, `apps/public-pwa/src/lib/public-data.ts` | Implemented — Workbox matches only cacheable public transport/announcement reads; snapshot storage writes no urgent-banner data, 2026-11-23. |
+
+## S6 implementation verification record
+
+| ID / check | Automated evidence | Result |
+|---|---|---|
+| RV-01 | `backend/tests/integration/*_api_contract.py` and `backend/tests/architecture/test_module_boundaries.py` | Passed — 58 backend tests total, including public/privileged contract and module-boundary checks, 2026-11-24. |
+| RV-02, RV-06 configuration | `backend/src/infrastructure/runtime/server.py`, `backend/tests/unit/test_runtime_profile.py` | Passed — executable launcher fixes Uvicorn at one worker and `limit_concurrency=500`; deployed at/above-cap response testing remains deployment evidence. |
+| RV-03 | `backend/tests/unit/test_release_performance.py` | Passed — 2,000 derived departures for 500 concurrent service-level readers completed below five seconds, 2026-11-24. |
+| PW-12 / offline-banner regression | `apps/public-pwa/tests/resilience.cy.ts` | Passed — manual offline refresh removes active network-only banners while preserving the valid snapshot, 2026-11-24. |
+| Public/admin browser workflows | `npm run test:e2e` | Passed — 23 Cypress scenarios (15 public, 8 admin), 2026-11-24. |
+| Backend lint | `python -m flake8 src tests` from `backend/` | Passed, 2026-11-24. |
+| Client type/lint/build | `npm run typecheck`, `npm run lint`, `NEXT_DIST_DIR=.next-verify npm run build` | Passed, 2026-11-24. The alternate generated-output directory avoided a pre-existing OneDrive `.next` reparse-point error. |
+| RV-04, RV-05, RV-06 live timing | Production/deployment environment | Deferred — needs the later hosting decision and an authorized deployed environment; no result is claimed. |
+| RV-08 | Production restore drill | Deferred by approved scope — select production hosting, backup, and recovery configuration, then run and record RTO <= 4 hours / RPO <= 1 hour testing. |
 
 ## Release evidence
 

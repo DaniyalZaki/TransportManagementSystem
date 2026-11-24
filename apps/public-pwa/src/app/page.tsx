@@ -22,7 +22,13 @@ export default function PublicHome() {
 
   const refresh = useCallback(async (fallback = snapshotRef.current) => {
     setIsRefreshing(true);
-    if (!navigator.onLine) { setAvailability(fallback && cacheIsUsable(fallback) ? "offline" : "unavailable"); setIsRefreshing(false); return; }
+    if (!navigator.onLine) {
+      // Active banners are network-only and must not survive an offline refresh.
+      setBanners([]);
+      setAvailability(fallback && cacheIsUsable(fallback) ? "offline" : "unavailable");
+      setIsRefreshing(false);
+      return;
+    }
     try {
       const updated = await synchronize(apiBaseUrl);
       snapshotRef.current = updated; setSnapshot(updated); setAvailability("fresh");
