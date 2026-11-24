@@ -1,7 +1,7 @@
 # Implementation Plan
 
-- **Version:** 1.9
-- **Status:** S0, S1, S2, S3, S4, and S5 complete
+- **Version:** 1.10
+- **Status:** S0, S1, S2, S3, S4, and S5 complete; S6 local implementation verification approved
 - **Source of truth:** `PRD.md`, `architecture.md`, `AGENTS.md`, and ADR-011
 - **History:** Git preserves every revision. A frozen copy of each accepted
   version is stored in `docs/plan-versions/`.
@@ -180,7 +180,7 @@ decision enables RTO/RPO verification.
 | S3 | Complete | Reviewed and pushed: direct PKT announcement publication, independent urgent-banner lifecycle, public/admin APIs and experiences; backend, type/lint, and Cypress checks passed | Accept |
 | S4 | Complete | Anonymous Feedback form, Feedback-owned PostgreSQL validation/delivery state, SMTP adapter, scheduled retry/retention work, and public API/PWA verification complete | Configure production SMTP recipient and credentials before release |
 | S5 | Complete | Workbox/IndexedDB public snapshot, 24-hour retention, PKT sync timestamp, fresh/stale/offline/outage/unavailable states, manual/reconnect/minute sync, and Firefox-safe cache-bypassing live reads verified by Cypress | Review required before release |
-| S6 | Not started | Production hosting and RTO/RPO choices are deferred | |
+| S6 | Local verification approved | Automated functional/security/API-contract checks, deterministic 2,000-departure/500-reader performance guard, Uvicorn one-worker/500-cap runtime configuration, client build/type/lint checks, and 23 Cypress scenarios passed | Production hosting, live publish/cap timing, backup/recovery configuration, and RTO/RPO restore drill are deferred by approved scope |
 
 ## 7. Constraints
 

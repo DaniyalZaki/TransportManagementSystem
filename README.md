@@ -234,14 +234,14 @@ Open three terminals after setup. The first terminal must have the virtual
 environment active and the `.env` variables loaded:
 
 ```powershell
-# Backend (repository root)
+# Backend (repository root; one worker with the required hard 500-concurrency cap)
 .\.venv\Scripts\Activate.ps1
 Get-Content .env | ForEach-Object {
   if ($_ -match '^\s*([^#=]+)=(.*)$') {
     Set-Item -Path "Env:$($matches[1].Trim())" -Value $matches[2].Trim()
   }
 }
-python -m uvicorn src.application.main:app --app-dir backend --reload --port 8000 --limit-concurrency 500
+python backend/run_server.py
 
 # Public PWA (second terminal)
 npm run dev --workspace @uzair/public-pwa
