@@ -36,8 +36,7 @@ Admin shell
 ├─ AuthSession / RoleGuard (UI convenience; backend is authoritative)
 ├─ ChangeSetWorkspace → Route/Bus/Assignment/Schedule editors + Publish panel
 ├─ PublicationHistoryAndRecovery
-├─ AnnouncementEditor + UrgentBannerLifecyclePanel
-└─ AccountManagement (Transport Management only)
+└─ AnnouncementEditor + UrgentBannerLifecyclePanel
 ```
 
 ```mermaid
@@ -58,9 +57,14 @@ flowchart LR
 
 Modules expose application services/DTOs rather than querying another module’s private tables. Transport publishes through an Audit interface within its transaction boundary; Audit never decides what is published.
 
+The backend exposes Transport Management-only account-mapping and deactivation
+routes. The current Admin Web App does not include a browser account-management
+form; initial account bootstrap and subsequent account administration use the
+documented backend/API path.
+
 ## Key interactions
 
-**Publish transport:** validate JWT/role; verify draft expiry/base and warnings; atomically promote snapshot/current pointer, retire the old pointer, write one publication record, and invalidate cache before success returns.
+**Publish transport:** validate JWT/role; verify the permanent shared draft and warnings; atomically promote snapshot/current pointer, retire the old pointer, and write one publication record. The service then invalidates the in-process cache before returning success.
 
 **Slice 2 delivery:** The Transport Data change-set application service owns
 shared-draft open/update, schedule-warning validation, stale-save rejection,
@@ -70,7 +74,8 @@ expected version, moves the published pointer, retires its predecessor, and
 calls Audit’s transaction-joining publication interface. Audit owns the
 publication record and recovery eligibility window. The sole FastAPI worker
 runs hourly draft-expiry, expired-publication-record, and retired-record
-cleanup; cleanup failure never stops serving public reads.
+retired-record, announcement, and feedback cleanup; cleanup failure never
+stops serving public reads. The permanent shared draft has no expiry cleanup.
 
 **Feedback:** reject populated honeypot; check normalized 10-minute duplicate window; persist and attempt SMTP; on initial failure retain, show error, and schedule only 1-, 5-, and 30-minute retries.
 

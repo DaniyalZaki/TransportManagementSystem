@@ -12,5 +12,5 @@ def test_health_endpoint_reports_ready() -> None:
 def test_openapi_describes_the_api() -> None:
     document = create_app().openapi()
 
-    assert document["info"]["title"] == "Uzair Transport Service API"
+    assert document["info"]["title"] == "Transport Service API"
     assert "/health" in document["paths"]

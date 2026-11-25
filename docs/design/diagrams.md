@@ -37,17 +37,16 @@ sequenceDiagram
   participant AUD as Audit module
   participant C as Read cache
   participant P as Public PWA
-  A->>API: Publish(change set, expected base, publish_anyway)
-  API->>DB: Verify role, draft state, current base
-  alt stale base
-    DB-->>API: conflict
-    API-->>A: 409; rebase required
+  A->>API: Publish(shared draft, publish_anyway)
+  API->>DB: Verify role, shared draft state, and warnings
+  alt warning needs confirmation
+    API-->>A: 422; publish_anyway required
   else eligible
     API->>DB: Begin transaction; promote snapshot/current pointer
     API->>AUD: Record publisher + publication time
     AUD->>DB: Insert publication event
-    API->>C: Invalidate relevant reads synchronously
     API->>DB: Commit
+    API->>C: Invalidate relevant reads synchronously
     API-->>A: 201 published
     P->>API: Read published schedule/current departures
     API-->>P: new published view only

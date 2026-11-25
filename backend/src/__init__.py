@@ -1,1 +1,1 @@
-"""Uzair Transport Service backend package."""
+"""Transport Service backend package."""

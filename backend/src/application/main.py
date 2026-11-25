@@ -67,7 +67,7 @@ async def _lifespan(_: FastAPI):
 
 def create_app() -> FastAPI:
     """Compose the single-worker modular-monolith HTTP application."""
-    app = FastAPI(title="Uzair Transport Service API", version="0.1.0", lifespan=_lifespan)
+    app = FastAPI(title="Transport Service API", version="0.1.0", lifespan=_lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[

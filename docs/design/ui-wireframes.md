@@ -6,7 +6,7 @@ These low-fidelity wireframes describe required content and behavior, not final 
 
 ```text
 ┌──────────────────────────────────────┐
-│ Uzair Transport Service     [Refresh] │
+│ Transport Service           [Refresh] │
 │ Last synced: 19 Nov, 13:05 PKT        │
 ├──────────────────────────────────────┤
 │ [Offline] [Information may be outdated]│  ← only when applicable
@@ -60,16 +60,14 @@ Announcements are newest first. Cached announcements are identified when require
 ┌────────────────────────────────────────────────────────────┐
 │ Admin / Transport                       User menu           │
 ├───────────────┬────────────────────────────────────────────┤
-│ Change sets   │ Spring timetable [Draft]                    │
-│ Routes        │ Base: Published set #18                     │
+│ Working draft │ Working draft [Draft]                       │
+│ Routes        │ Base: Current published snapshot            │
 │ Buses         │ [Routes] [Buses] [Assignments] [Schedule]  │
 │ Assignments   │ Editable, accessible data table             │
 │ Schedule      │                                             │
 │ Publications  │ Warnings: 1 incomplete entry                │
 │ Announcements │ [Save draft] [Publish…]                     │
-│ Accounts*     │                                             │
 └───────────────┴────────────────────────────────────────────┘
-* Transport Management only
 ```
 
 Schedule rows contain weekday 1–7, Route, all buses assigned to that Route, and departure time; there is no per-schedule bus selector. Route direction is a `RETURN`/`PICK-UP` select. The launcher contains one styled **Open Draft** action for the permanent shared draft. The desktop grid places Audit History beside the Working Copy (or Draft Editor once open), with Protected Publication below across both columns; its grid gap remains constant while history is expanded or collapsed. Publish is greyed out until the displayed snapshot has no unsaved changes; Publish warns only when a route has no recurring schedule entry and requires explicit “Publish anyway” in that case. The editor does not display a draft version; save/publish completion and errors remain visible within the editor.
@@ -81,9 +79,9 @@ Schedule rows contain weekday 1–7, Route, all buses assigned to that Route, an
 │ New announcement                     │
 │ Title [                             ] │
 │ Body  [                             ] │
-│ [ ] Operational change  [ ] Urgent   │
+│ [ ] Urgent                           │
 │ Expiry: (•) PKT date/time ( ) Manual │
-│ [Confirm change] [Publish]           │
+│ [Publish]                            │
 └──────────────────────────────────────┘
 
 Published urgent item

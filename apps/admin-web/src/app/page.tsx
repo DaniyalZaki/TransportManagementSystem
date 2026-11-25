@@ -264,7 +264,7 @@ export default function AdminHome() {
     <main className="admin-shell">
       <header className="admin-header">
         <div>
-          <p className="eyebrow">Uzair Transport Service</p>
+          <p className="eyebrow">Transport Service</p>
           <h1>Transport management</h1>
         </div>
         <span className="environment-label">Privileged workspace</span>
