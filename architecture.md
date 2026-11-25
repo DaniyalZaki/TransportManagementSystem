@@ -4,7 +4,7 @@
 
 Students and the public view current departure status, bus/route schedules, and service announcements without logging in. Transport Management and designated administrators create, edit, and publish route, schedule, and announcement data, and review submitted feedback. The portal is intended to become the sole official channel for this information, replacing the existing whatsapp channel.
 
-**Source of truth for product requirements:** Validated_PRD.md.
+**Source of truth for product requirements:** PRD.md.
 
 ## 2. Architecturally significant requirements
 
@@ -34,7 +34,7 @@ Students and the public view current departure status, bus/route schedules, and 
 | ASR-01, ASR-03, ASR-04, CON-01 (overall style) | Microservices, modular monolith, unstructured monolith | Microservices add distributed-transaction, service-discovery, and multi-pipeline overhead not justified at this scale. An unstructured monolith is faster to start but risks coupling that undermines the draft/publish and audit separations | Modular monolith: one deployable backend with enforced internal module boundaries |
 | ASR-07, ASR-08 (public/admin separation) | Single unified app with route-based access control. Two separate front-end clients sharing one backend API | A unified app bundles admin code/weight into what students download on mobile and widens the public attack surface. Two clients mean two build pipelines but keep the public bundle lean and the privileged surface isolated | Separate Public PWA and Admin Web App, both calling the same backend API, RBAC enforced at the API, not the client |
 | ASR-03, ASR-06 (draft/publish data model) | Single table with a status flag, fully separate draft/published tables, event-sourced model | A bare flag risks a missed filter exposing a draft. Separate tables duplicate schema and need explicit publish-sync logic. Event sourcing fits audit needs but is more complexity than this domain requires | Versioned records per entity (`status` + `version` discriminator), public reads are restricted to published-version rows only |
-| ASR-01 (publish propagation) | Client polling only, server push (WebSocket/SSE), backend cache invalidated synchronously on publish | Polling alone is latency-bound by the client's poll interval. Push infrastructure adds persistent-connection overhead not otherwise required. A synchronously invalidated cache makes any subsequent request return fresh data without added infrastructure | Cache layer in front of hot reads, invalidated inside the publish transaction |
+| ASR-01 (publish propagation) | Client polling only, server push (WebSocket/SSE), backend cache invalidated synchronously after publish commit | Polling alone is latency-bound by the client's poll interval. Push infrastructure adds persistent-connection overhead not otherwise required. A synchronously invalidated cache makes any subsequent request return fresh data without added infrastructure | Cache layer in front of hot reads, invalidated after the successful publication transaction and before the request returns |
 | ASR-02 (urgent-announcement pathway) | Dedicated fast-path/queue for urgent announcements; shared pipeline for all publishing | A dedicated fast path adds complexity for a narrow case; announcements already publish directly (no draft step), so they're already lightweight writes | Urgent and routine announcements share the same publish pipeline; revisit only if contention is observed |
 | ASR-04, ASR-08 (offline/caching) | No client-side cache, custom service worker, Workbox | No cache fails the offline requirement outright; Workbox reduces implementation risk | Next.js Public PWA with a Workbox Service Worker, Cache Storage, and IndexedDB; sync runs while the app is open |
 | ASR-06 (audit/versioning) | Full edit history, publication-only history | Full history is broader than the approved audit scope | Append-only, transactional transport-publication log with publisher and time; retained for 30 days |
@@ -54,14 +54,12 @@ flowchart TD
     API --> AUD[Audit module]
     API --> REP[Reporting module]
     API --> AUTH[Authentication Module]
-    TD -->|publish event| CACHE[("Read cache (Not Confirmed)")]
+    TD -->|publication succeeds| CACHE[("Single-worker in-process read cache")]
     ANN -->|publish event| CACHE
-    CACHE --> DB[(Relational database)]
     TD --> DB
     ANN --> DB
     FB --> DB
     AUD --> DB
-    REP --> DB
     AUTH -->|role/session verification| IDP[("Supabase Auth (identity provider)")]
     PUI -.->|local sync / offline cache| LOCAL[("Workbox + IndexedDB/Cache Storage")]
 ```
@@ -87,7 +85,7 @@ The Transport Data and Announcement modules remain the sole authorities for what
 |---|---|---|
 | PublishTransportData | authenticated privileged user, shared draft baseline | Snapshots the shared draft into a new published version, writes the publication record, and invalidates relevant cache entries synchronously. Save/publish operations pass through the single-worker FIFO gate and receive a temporary numeric execution-order ID. |
 | PublishAnnouncement | authenticated privileged user, announcement content, urgency flag | Publishes directly (no draft step) and invalidates cache synchronously. Must complete within the 1-minute bound for urgent items (ASR-02) |
-| GetCurrentDeparture / GetSchedule | route or bus ID, date | Returns only published data; no authentication required. A weekly schedule row uses weekday 1–7, Route, and time, then expands to every bus assigned to that Route (ASR-07). |
+| GetCurrentDeparture / GetSchedule | optional service date | Returns only published data; no authentication required. A weekly schedule row uses weekday 1–7, Route, and time, then expands to every bus assigned to that Route (ASR-07). |
 | SubmitFeedback | content, honeypot field | Rejects if honeypot is populated or a content-identical submission exists within the last 10 minutes (ASR-09). No IP-based checks |
 | GetPublicationHistory / RecoverPublishedChangeSet | change-set ID, date range | Returns transport-publication history for 30 days; recovery targets a whole previously published change set, never a draft (ASR-06) |
 
@@ -97,7 +95,7 @@ The Transport Data and Announcement modules remain the sole authorities for what
 2. Both the Public PWA and Admin Web App communicate only through the backend API. Neither queries the database directly.
 3. A module must not directly access another module's private database tables or internals.
 4. The draft/publish split must be enforced at the data layer so that no unpublished draft is ever returned by a public read path (ASR-03, ASR-07).
-5. Any cache sitting in front of reads must be invalidated synchronously within the publish transaction, not on a delay, to support ASR-01 and ASR-02.
+5. Any cache sitting in front of reads must be invalidated synchronously after a successful publication transaction and before the request returns, not on a delay, to support ASR-01 and ASR-02.
 6. The client must implement local persistence and a sync mechanism capable of distinguishing stale, offline, and outage states, per ASR-04. This logic lives entirely on the client against a locally stored timestamp.
 7. Authenticate privileged users through self-hosted Supabase Auth and enforce RBAC in the backend API from a backend-owned role mapping. The backend validates active JWTs locally; active sessions remain authorized until token expiry after deactivation. Public read endpoints remain unauthenticated. Do not build credential storage or session management in the backend.
 8. Do not introduce WhatsApp, GPS/live-tracking, payment, AI chatbot integrations, Kafka, Kubernetes, separate deployable microservices, or additional databases without an ASR-based justification and explicit approval (CON-01).

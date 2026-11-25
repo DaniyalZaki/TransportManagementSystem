@@ -3,12 +3,13 @@
 - **Version:** 1.10
 - **Status:** S0, S1, S2, S3, S4, and S5 complete; S6 local implementation verification approved
 - **Source of truth:** `PRD.md`, `architecture.md`, `AGENTS.md`, and ADR-011
-- **History:** Git preserves every revision. A frozen copy of each accepted
-  version is stored in `docs/plan-versions/`.
+- **History:** Git preserves every revision. An archived copy of each accepted
+  version is stored in `docs/plan-versions/`; repository-wide terminology
+  corrections may be applied to those copies without changing their decisions.
 
 ## 1. Implementation objective
 
-Deliver Uzair Transport Service as a modular monolith: a public Next.js PWA,
+Deliver Transport Service as a modular monolith: a public Next.js PWA,
 a separate Next.js admin application, and a single-worker FastAPI backend
 backed by PostgreSQL. The release supplies published schedules/current
 departures, announcements and urgent banners, controlled transport publishing,
@@ -79,8 +80,8 @@ decision enables RTO/RPO verification.
 
 ### S2 — Managed transport publishing [HITL]
 
-1. Implement named change sets, draft creation/update, 30-day draft expiry,
-   optimistic stale-change-set detection, and rebase workflow.
+1. Implement the one permanent shared draft, complete-snapshot update, and
+   optimistic stale-save detection.
 2. Implement warnings plus explicit “Publish anyway” confirmation for
    incomplete/conflicting schedules.
 3. Publish complete change sets atomically: new versions, published pointers,
@@ -99,8 +100,8 @@ decision enables RTO/RPO verification.
 2. Implement urgent announcements with a separate persistent banner; removal
    hides only the banner, while resolution records resolution and stops banner
    display.
-3. Keep urgent and routine publications on one pipeline; ensure confirmed
-   operational changes publish within one minute.
+3. Keep urgent and routine publications on one pipeline; urgent publication
+   creates both the announcement and its separate banner.
 4. Do not create announcement-version, edit, or login/logout audit records.
 5. Build public/admin experiences and lifecycle tests, including multiple
    banners and announcement-expiry/banner independence.
@@ -153,8 +154,8 @@ decision enables RTO/RPO verification.
   visible.
 - Current departure uses PKT and identifies the next departure for every
   published Route–Bus assignment pair, or “No further departures today.”
-- A named change set is published atomically, stale drafts are rebased, and
-  recovery restores a whole published change set within 30 days.
+- The permanent shared draft is published atomically, stale saves are rejected,
+  and recovery restores a whole published change set within 30 days.
 - Transport publication records contain only publisher and publication time;
   no edit, announcement-version, or login/logout audit history is created.
 - Only Transport Management manages accounts; both privileged roles are
@@ -205,4 +206,5 @@ decision enables RTO/RPO verification.
 
 When this plan changes, update `plan.md`, copy its complete approved content
 to `docs/plan-versions/plan-v<N>.md`, and commit both in the same Git commit.
-Git history and the immutable per-version copies must agree.
+Git history preserves the decision record; archive copies may receive only
+repository-wide terminology corrections.

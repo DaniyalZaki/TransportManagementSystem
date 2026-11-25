@@ -8,7 +8,7 @@
 
 ## 1. Implementation objective
 
-Deliver Uzair Transport Service as a modular monolith: a public Next.js PWA,
+Deliver Transport Service as a modular monolith: a public Next.js PWA,
 a separate Next.js admin application, and a single-worker FastAPI backend
 backed by PostgreSQL. The release supplies published schedules/current
 departures, announcements and urgent banners, controlled transport publishing,

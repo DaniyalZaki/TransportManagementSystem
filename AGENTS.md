@@ -2,7 +2,7 @@
 
 ## Project
 
-Uzair Transport Service is a public transport-information portal for
+Transport Service is a public transport-information portal for
 students and the wider university community. It provides published route
 and schedule information, current departures, announcements, urgent
 notices, and a public feedback channel. Privileged transport-management

@@ -43,7 +43,7 @@ The application provides a centralized channel for transport information and Fee
 
 ## 2. Problem and User Need
 
-A Computer Engineering student commutes daily via Uzair Transport. Transport updates and bus timings are shared mainly through a WhatsApp channel. Critical schedule updates get lost among irrelevant announcements. The student has difficulty finding timely departure schedules, risks missing coasters/buses on the return journey, and experiences stress arranging costly alternative transport. The client selected a dedicated web application.
+A Computer Engineering student commutes daily using the university transport service. Transport updates and bus timings are shared mainly through a WhatsApp channel. Critical schedule updates get lost among irrelevant announcements. The student has difficulty finding timely departure schedules, risks missing coasters/buses on the return journey, and experiences stress arranging costly alternative transport. The client selected a dedicated web application.
 
 The user wants to stay up to date with daily coaster timings, routes and announcements through a web app that is easy to use and access, and wants a Feedback page to inform Transport Management of any issues.
 
@@ -84,7 +84,7 @@ The user wants to stay up to date with daily coaster timings, routes and announc
 | Date-specific override | A schedule change applying to one specified service date; it takes precedence over the recurring weekly schedule for that date. It may specify a no-service day. |
 | Draft transport data | The one saved shared Route, Bus/Service Identifier, assignment, and Schedule / Timetable workspace; it is not visible to students until separately published and never expires. |
 | Announcement expiry | The optional date/time selected by an authorized publisher for an announcement to stop being displayed. An announcement may instead remain visible until manually removed. |
-| Announcement version history | The retained prior versions of an announcement when its published content is edited. |
+| Announcement version history | Prior versions of an announcement; this release does not retain them when published content is edited. |
 | Service date | The calendar date, in Pakistan Standard Time (PKT), on which a scheduled departure is assigned to operate. |
 | Departure instance | One scheduled service derived from a schedule row and a Bus/Service Identifier assigned to its Route, uniquely identified by service date, scheduled departure date/time, Route, and Bus/Service Identifier. |
 | Current departure | For each Route and Bus/Service Identifier, the earliest departure instance scheduled for the current service date whose scheduled departure time is at or after the current PKT time. It is a next-upcoming departure, not a GPS/live-location status. |

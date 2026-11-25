@@ -16,7 +16,7 @@ class SmtpFeedbackMailer:
         if not self._settings.smtp_host or not self._settings.feedback_recipient:
             raise RuntimeError("Feedback SMTP is not configured")
         message = EmailMessage()
-        message["Subject"] = "Uzair Transport Service feedback"
+        message["Subject"] = "Transport Service feedback"
         message["From"] = self._settings.smtp_sender or self._settings.feedback_recipient
         message["To"] = self._settings.feedback_recipient
         message.set_content(f"Feedback:\n{item.content}\n\nName: {item.name or 'Anonymous'}\nContact: {item.contact or 'Not provided'}")
