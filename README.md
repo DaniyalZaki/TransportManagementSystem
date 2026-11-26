@@ -110,8 +110,13 @@ Prerequisites: Python 3.11+, Node.js 20+, npm, and Docker Compose.
 5. Install JavaScript dependencies from the repository root:
 
    ```powershell
-   npm install
+   npm ci
    ```
+
+   `node_modules`, Python virtual environments, Next.js `.next` output, and
+   test caches are generated local artifacts and are intentionally not required
+   in a fresh checkout. Recreate them with `npm ci` and steps 3–4 above before
+   running the applications or checks.
 
 ## Configure SMTP feedback delivery
 
@@ -285,10 +290,14 @@ docker compose --env-file infra/local/.env -f infra/local/compose.yaml ps
 # 3. Install the backend, including PostgreSQL support, in the exact virtual
 #    environment that starts the application. This repository's local venv
 #    was created with MSYS2 Python, so it uses bin rather than Scripts.
+python -m venv .venv
 .\.venv\bin\python.exe -m pip install -e "backend[postgres,dev]" "uvicorn>=0.30,<1.0"
 .\.venv\bin\python.exe -c "import asyncpg; print(asyncpg.__version__)"
 
-# 4. Load local backend settings and run idempotent handwritten migrations.
+# 4. Restore JavaScript dependencies recorded in package-lock.json.
+npm ci
+
+# 5. Load local backend settings and run idempotent handwritten migrations.
 Get-Content .env | ForEach-Object {
   if ($_ -match '^\s*([^#=]+)=(.*)$') {
     Set-Item -Path "Env:$($matches[1].Trim())" -Value $matches[2].Trim()
@@ -368,8 +377,8 @@ deployment checks are maintained in [docs/design/test-cases.md](docs/design/test
 
 | Document | Purpose |
 |---|---|
-| [PRD.md](PRD.md) | Validated requirements, rules, flows, acceptance criteria, and open questions |
-| [architecture.md](architecture.md) | Modular-monolith rationale, boundaries, interfaces, and constraints |
+| [PRD.md](docs/architecture/PRD.md) | Validated requirements, rules, flows, acceptance criteria, and open questions |
+| [architecture.md](docs/architecture/architecture.md) | Modular-monolith rationale, boundaries, interfaces, and constraints |
 | [plan.md](plan.md) | Approved vertical-slice implementation plan |
 | [ADR-011](docs/adr/ADR-011.md) | Current implementation/lifecycle profile; supersedes conflicting earlier ADR language |
 | [API contracts](docs/design/api-contracts.md) | Proposed REST contracts grounded in the approved source documents |
