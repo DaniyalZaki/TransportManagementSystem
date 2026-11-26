@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 def test_backend_declares_the_required_logical_modules() -> None:
-    modules = Path("src/modules")
+    modules = Path(__file__).resolve().parents[2] / "src" / "modules"
     expected = {
         "announcement",
         "audit",
