@@ -90,7 +90,7 @@ describe("public PWA resilience", () => {
     interceptPublished(); cy.visit("/"); cy.wait(["@current", "@schedule", "@announcements", "@banners"]);
     interceptUnavailable(); cy.findByRole("button", { name: /refresh/i }).click();
     cy.contains("Network-only banner").should("not.exist");
-    cy.contains("Published notice").should("be.visible");
+    cy.get(".announcement-list").contains("strong", "Published notice").should("be.visible");
   });
 
   it("labels a valid snapshot offline and removes network-only urgent banners", () => {
@@ -98,7 +98,7 @@ describe("public PWA resilience", () => {
     cy.window().then((window) => Object.defineProperty(window.navigator, "onLine", { configurable: true, value: false }));
     cy.findByRole("button", { name: /^refresh$/i }).click();
     cy.findByRole("heading", { name: /^offline$/i }).should("be.visible");
-    cy.contains("Published notice").should("be.visible"); cy.contains("Network-only banner").should("not.exist");
+    cy.get(".announcement-list").contains("strong", "Published notice").should("be.visible"); cy.contains("Network-only banner").should("not.exist");
   });
 
   it("reconnects by replacing cached data only after a successful synchronization", () => {
